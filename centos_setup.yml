@@ -1,0 +1,45 @@
+---
+- hosts: all
+  remote_user: root
+  tasks:
+    - name: Replace yum repo
+      get_url:
+        url: http://mirrors.163.com/.help/CentOS7-Base-163.repo
+        dest: /etc/yum.repos.d/CentOS-Base.repo
+        backup: yes
+        force: yes
+      notify:
+        - Yum Update
+    - name: EPEL Yum Repo
+      yum_repository:
+        name: epel-7
+        baseurl: http://mirrors.aliyun.com/repo/epel-7.repo
+      notify:
+        - Yum Update
+    - name: Install add-ons
+      yum:
+        name:
+          - yum-utils
+          - wget
+          - net-tools
+          - vim
+          - bash-completion
+          - mlocate
+          - lrzsz
+          - gcc
+          - gcc-c++
+        state: latest
+    - name: Install the 'Development tools' package group
+      yum:
+        name: "@Development tools"
+        state: latest
+    - name: Stop Firewalld
+      command: systemctl stop firewalld
+    - name: Disable Firewalld
+      command: systemctl disable firewalld
+  handlers:
+    - name: Yum Update
+      yum:
+        name: '*'
+        update_cache: yes
+        state: latest
