@@ -156,7 +156,7 @@ func_epel() {
 func_firewall() {
 	echo && echo -e "\e[1;36;40m####################Firewall Configuration####################\e[0m" && echo
 
-	fwstat=$(systemctl status firewalld.service | grep "Active" | awk '{print $2}')
+	fwstat=$(systemctl status firewalld | grep "Active" | awk '{print $2}')
 	iptstat=$(systemctl status iptables | grep "Active" | awk '{print $2}')
 
 	if [ "${fwstat}" = "inactive" -a "${iptstat}" = "active" ]; then
