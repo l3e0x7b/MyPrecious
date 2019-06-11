@@ -1,5 +1,3 @@
 # Toys
 
-* [x] centos_setup.sh
-* [ ] centos_setup.yml
-* [ ] zabbix-agent_install.sh
+瞎几把写
