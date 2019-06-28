@@ -170,7 +170,7 @@
       when:
         - ansible_facts['distribution_release'] == "stretch"
         - ansible_facts['architecture'] == "i386"
-      - name: install zabbix agent on sles 12
+    - name: install zabbix agent on sles 12
       zypper:
         name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/4.2/sles/12/x86_64/zabbix-agent-{{ agent_version }}.el12.x86_64.rpm
         state: present
@@ -179,8 +179,8 @@
         - restart zabbix agent service
       when:
         - ansible_facts['distribution'] == "SLES"
-        - ansible_facts['distribution_major_version'] == '12'
-      - name: install zabbix agent on sles 15
+        - ansible_facts['distribution_major_version'] == "12"
+    - name: install zabbix agent on sles 15
       zypper:
         name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/4.2/sles/15/x86_64/zabbix-agent-{{ agent_version }}.el15.x86_64.rpm
         state: present
@@ -189,7 +189,7 @@
         - restart zabbix agent service
       when:
         - ansible_facts['distribution'] == "SLES"
-        - ansible_facts['distribution_major_version'] == '15'
+        - ansible_facts['distribution_major_version'] == "15"
   handlers:
     - name: configure zabbix agent
       lineinfile:
