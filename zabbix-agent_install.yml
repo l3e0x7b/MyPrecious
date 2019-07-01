@@ -1,3 +1,4 @@
+# A playbook to install Zabbix Agent on multiple Linux distributions.
 ---
 - hosts: all
   vars:
@@ -6,193 +7,81 @@
     zabbix_server: 10.10.100.131
   remote_user: root
   tasks:
-    - name: install zabbix agent on x86_64 rhel5/centos5
+    - name: install zabbix agent on rhel/centos 5/7
       yum:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/5/x86_64/zabbix-agent-{{ agent_version }}.el5.x86_64.rpm
+        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/{{ ansible_distribution_major_version }}/{{ ansible_architecture }}/zabbix-agent-{{ agent_version }}.el{{ ansible_distribution_major_version }}.{{ ansible_architecture }}.rpm
         state: present
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when: 
-        - ansible_facts['os_family'] == "RedHat"
-        - ansible_facts['distribution_major_version'] == "5"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 rhel5/centos5
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version == "5" or ansible_distribution_major_version == "7"
+    - name: install zabbix agent on rhel6/centos6
       yum:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/5/i386/zabbix-agent-{{ agent_version }}.el5.i386.rpm
+        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/6/{{ ansible_architecture }}/zabbix-agent-{{ agent_version }}.el6.{{ ansible_machine }}.rpm
         state: present
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['os_family'] == "RedHat"
-        - ansible_facts['distribution_major_version'] == "5"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 rhel6/centos6
-      yum:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/6/x86_64/zabbix-agent-{{ agent_version }}.el6.x86_64.rpm
-        state: present
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when: 
-        - ansible_facts['os_family'] == "RedHat"
-        - ansible_facts['distribution_major_version'] == "6"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 rhel6/centos6
-      yum:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/6/i386/zabbix-agent-{{ agent_version }}.el6.i686.rpm
-        state: present
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['os_family'] == "RedHat"
-        - ansible_facts['distribution_major_version'] == "6"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 rhel7/centos7
-      yum:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/rhel/7/x86_64/zabbix-agent-{{ agent_version }}.el7.x86_64.rpm
-        state: present
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['os_family'] == "RedHat"
-        - ansible_facts['distribution_major_version'] == "7"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on x86_64 ubuntu 14.04
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version == "6"
+    - name: install zabbix agent on x86_64 ubuntu 14.04/16.04/18.04
       apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+trusty_amd64.deb
+        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+{{ ansible_distribution_release }}_amd64.deb
         state: present
         force_apt_get: true
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['distribution_release'] == "trusty"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 ubuntu 14.04
+        - ansible_distribution_release == "trusty" or ansible_distribution_release == "xenial" or ansible_distribution_release == "bionic"
+        - ansible_architecture == "x86_64"
+    - name: install zabbix agent on i386 ubuntu 14.04/16.04/18.04
       apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+trusty_i386.deb
+        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+{{ ansible_distribution_release }}_i386.deb
         state: present
         force_apt_get: true
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['distribution_release'] == "trusty"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 ubuntu 16.04
+        - ansible_distribution_release == "trusty" or ansible_distribution_release == "xenial" or ansible_distribution_release == "bionic"
+        - ansible_architecture == "i386"
+    - name: install zabbix agent on x86_64 debian 8/9
       apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+xenial_amd64.deb
+        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+{{ ansible_distribution_release }}_amd64.deb
         state: present
         force_apt_get: true
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['distribution_release'] == "xenial"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 ubuntu 16.04
+        - ansible_distribution_release == "jessie" or ansible_distribution_release == "stretch"
+        - ansible_architecture == "x86_64"
+    - name: install zabbix agent on i386 debian 8/9
       apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+xenial_i386.deb
+        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+{{ ansible_distribution_release }}_i386.deb
         state: present
         force_apt_get: true
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['distribution_release'] == "xenial"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 ubuntu 18.04
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+bionic_amd64.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "bionic"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 ubuntu 18.04
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/ubuntu/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+bionic_i386.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "bionic"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 debian 8
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+jessie_amd64.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "jessie"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 debian 8
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+jessie_i386.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "jessie"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on x86_64 debian 9
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+stretch_amd64.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "stretch"
-        - ansible_facts['architecture'] == "x86_64"
-    - name: install zabbix agent on i386 debian 9
-      apt:
-        deb: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/debian/pool/main/z/zabbix/zabbix-agent_{{ agent_version }}+stretch_i386.deb
-        state: present
-        force_apt_get: true
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution_release'] == "stretch"
-        - ansible_facts['architecture'] == "i386"
-    - name: install zabbix agent on sles 12
+        - ansible_distribution_release == "jessie" or ansible_distribution_release == "stretch"
+        - ansible_architecture == "i386"
+    - name: install zabbix agent on sles 12/15
       zypper:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/sles/12/x86_64/zabbix-agent-{{ agent_version }}.el12.x86_64.rpm
+        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/sles/{{ ansible_distribution_major_version }}/x86_64/zabbix-agent-{{ agent_version }}.el{{ ansible_distribution_major_version }}.x86_64.rpm
         state: present
         disable_gpg_check: true
       notify:
         - configure zabbix agent
         - restart zabbix agent service
       when:
-        - ansible_facts['distribution'] == "SLES"
-        - ansible_facts['distribution_major_version'] == "12"
-    - name: install zabbix agent on sles 15
-      zypper:
-        name: https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/{{ agent_major_version }}/sles/15/x86_64/zabbix-agent-{{ agent_version }}.el15.x86_64.rpm
-        state: present
-        extra_args: '--gpg-auto-import-keys'
-      notify:
-        - configure zabbix agent
-        - restart zabbix agent service
-      when:
-        - ansible_facts['distribution'] == "SLES"
-        - ansible_facts['distribution_major_version'] == "15"
+        - ansible_distribution == "SLES"
+        - ansible_distribution_major_version == "12" or ansible_distribution_major_version == "15"
   handlers:
     - name: configure zabbix agent
       lineinfile:
