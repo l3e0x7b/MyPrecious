@@ -6,18 +6,20 @@ sh get-docker.sh --mirror Aliyun
 systemctl enable docker
 systemctl start docker
 
-tee -a /etc/sysctl.conf <<-EOF
+if [[ -f /etc/redhat-release ]]; then
+	cat <<-EOF >> /etc/sysctl.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 EOF
+fi
 
 sysctl -p
 
-cat <<EOF > /etc/docker/daemon.json
+cat <<-EOF > /etc/docker/daemon.json
 {
   "registry-mirrors": [
-    "https://dockerhub.azk8s.cn",
-    "https://reg-mirror.qiniu.com"
+	"https://dockerhub.azk8s.cn",
+	"https://reg-mirror.qiniu.com"
   ]
 }
 EOF
