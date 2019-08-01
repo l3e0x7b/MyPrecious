@@ -1962,12 +1962,12 @@ else
 	if [[ ${rsysconfid} -eq 1 ]]; then
 		echo -e "\n\t未检测到任何日志配置，跳过检查。" >> ${REPORT}
 	else
-		grep '^$FileCreateMode' /etc/rsyslog.conf /etc/rsyslog.d/*.conf &> /dev/null
+		grep '^${file}CreateMode' /etc/rsyslog.conf /etc/rsyslog.d/*.conf &> /dev/null
 		if [[ $? -ne 0 ]]; then
 			echo -e "\n\trsyslog 默认文件权限未配置。" >> ${REPORT}
 		else
 			echo -e "\n\trsyslog 默认文件权限配置如下：" >> ${REPORT}
-			grep '^$FileCreateMode' /etc/rsyslog.conf /etc/rsyslog.d/*.conf | sed 's/^/\t/g' >> ${REPORT}
+			grep '^${file}CreateMode' /etc/rsyslog.conf /etc/rsyslog.d/*.conf | sed 's/^/\t/g' >> ${REPORT}
 		fi
 	fi
 fi
@@ -2506,7 +2506,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -s /tmp/users ]]; then
+if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最大密码更改间隔未配置为 365 天或更短：" >> ${REPORT}
 	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2529,7 +2529,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -s /tmp/users ]]; then
+if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最小密码更改间隔未配置为 7 天或更长：" >> ${REPORT}
 	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2552,7 +2552,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -s /tmp/users ]]; then
+if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码过期告警时间未配置为 7 天或更长：" >> ${REPORT}
 	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2575,7 +2575,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -s /tmp/users ]]; then
+if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码失效时间未配置为 30 天或更短：" >> ${REPORT}
 	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2585,7 +2585,7 @@ echo "" >> ${REPORT}
 
 echo -n "5.4.1.5 检查是否所有用户的最后密码修改日期都在过去" | tee -a ${REPORT}
 for user in ${users}; do
-	date=`chage --list ${user} | grep Last | cut -d: -f2 | tr -d ' '`
+	date=`chage --list ${user} | grep Last | cut -d: -f2 | sed 's/^[ \t]*//g'`
 	if [[ ${date} != "never" ]]; then
 		time=`date -d "$date" +%s`
 		now=`date +%s`
@@ -2595,7 +2595,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -s /tmp/users ]]; then
+if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最后密码修改日期不在过去：" >> ${REPORT}
 	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
 else
@@ -2919,62 +2919,49 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "6.2.6 检查 root PATH 完整性" | tee -a ${REPORT}
-cat <<EOF > /tmp/pathchk.sh
-#!/bin/bash
-if [[ \`echo \$PATH | grep ::\` != "" ]]; then
-  echo "Empty Directory in PATH (::)"
+echo -e "\n\t当前 PATH 信息：`echo $PATH`" >> ${REPORT}
+echo $PATH | egrep "::|:$" &> /dev/null
+if [[ $? -eq 0 ]]; then
+  echo "PATH 中存在空目录或 PATH 结尾为\":\"。" >> ${REPORT}
 fi
-if [[ \`echo \$PATH | grep :\$\` != "" ]]; then
-  echo "Trailing : in PATH"
-fi
-p=\`echo \$PATH | sed -e 's/::/:/' -e 's/:$//' -e 's/:/ /g'\`
-set -- \$p
-while [[ \$1 != "" ]]; do
-  if [[ \$1 = "." ]]; then
-    echo "PATH contains ."
+p=`echo $PATH | sed -e 's/::/:/g; s/:$//; s/:/ /g'`
+set -- $p
+while [[ $1 != "" ]]; do
+  if [[ $1 = "." ]]; then
+    echo -e "\n\tPATH 中存在 \".\"。" >> ${REPORT}
     shift
     continue
   fi
-  if [[ -d \$1 ]]; then
-    dirperm=\`ls -ldH \$1 | cut -f1 -d" "\`
-    if [[ \`echo \$dirperm | cut -c6\` != "-" ]]; then
-      echo "Group Write permission set on directory \$1"
+  if [[ -d $1 ]]; then
+    dirperm=`ls -ldH $1 | cut -f1 -d" "`
+    if [[ `echo ${dirperm} | cut -c6` != "-" ]]; then
+      echo -e "\n\t目录 $1 设置了组可写权限。" >> ${REPORT}
     fi
-    if [[ \`echo \$dirperm | cut -c9\` != "-" ]]; then
-      echo "Other Write permission set on directory \$1"
+    if [[ `echo ${dirperm} | cut -c9` != "-" ]]; then
+      echo -e "\n\t目录 $1 设置了其他人可写权限。" >> ${REPORT}
     fi
-    dirown=\`ls -ldH \$1 | awk '{print \$3}'\`
-    if [[ \$dirown != "root" ]] ; then
-      echo \$1 is not owned by root
+    dirown=`ls -ldH $1 | awk '{print $3}'`
+    if [[ ${dirown} != "root" ]] ; then
+      echo -e "\n\t$1 的属主非 root。" >> ${REPORT}
     fi
   else
-    echo \$1 is not a directory
+    echo -e "\n\t$1 不存在或不是一个目录。" >> ${REPORT}
   fi
   shift
 done
-EOF
-
-bash /tmp/pathchk.sh > /tmp/output 2> /dev/null
-if [[ -s /tmp/output ]]; then
-	echo -e "\n\troot PATH 存在异常：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
-else
-	echo -e "\n\troot PATH 正常。" >> ${REPORT}
-fi
-rm -f /tmp/pathchk.sh /tmp/output
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "6.2.7 检查所有用户是否都存在家目录" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
 if [[ ! -d ${dir} ]]; then
-echo ${user}
+echo -e "\t${user}" >> /tmp/output
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户不存在家目录：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t所有用户都存在家目录。" >> ${REPORT}
 fi
@@ -2984,28 +2971,26 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.8 检查用户家目录的权限是否为 750 或更高限制" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
-dirperm=`ls -ld $dir | cut -f1 -d" "`
-if [[ `echo $dirperm | cut -c6` != "-" ]]; then
-	echo "用户 ${user} 的家目录 ${dir} 设置了组可写权限。"
+if [[ -d ${dir} ]]; then
+dirperm=`ls -ld ${dir} | cut -f1 -d" "`
+if [[ `echo ${dirperm} | cut -c6` != "-" ]]; then
+	echo -e "\t用户 ${user} 的家目录 ${dir} 设置了组可写权限。" >> /tmp/output
 fi
-if [[ `echo $dirperm | cut -c8` != "-" ]]; then
-	echo "用户 ${user} 的家目录 ${dir} 设置了其他人可读权限。"
+if [[ `echo ${dirperm} | cut -c8` != "-" ]]; then
+	echo -e "\t用户 ${user} 的家目录 ${dir} 设置了其他人可读权限。" >> /tmp/output
 fi
-if [[ `echo $dirperm | cut -c9` != "-" ]]; then
-	echo "用户 ${user} 的家目录 ${dir} 设置了其他人可写权限。"
+if [[ `echo ${dirperm} | cut -c9` != "-" ]]; then
+	echo -e "\t用户 ${user} 的家目录 ${dir} 设置了其他人可写权限。" >> /tmp/output
 fi
-if [[ `echo $dirperm | cut -c10` != "-" ]]; then
-	echo "用户 ${user} 的家目录 ${dir} 设置了其他人可执行权限。"
+if [[ `echo ${dirperm} | cut -c10` != "-" ]]; then
+	echo -e "\t用户 ${user} 的家目录 ${dir} 设置了其他人可执行权限。" >> /tmp/output
 fi
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户家目录的权限存在异常：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t用户家目录的权限均为 750 或更高限制。" >> ${REPORT}
 fi
@@ -3013,23 +2998,21 @@ rm -f /tmp/output
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.2.9 检查用户的家目录是否由自己拥有" | tee -a ${REPORT}
+echo -n "6.2.9 检查用户家目录的属主是否为自己" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
-owner=$(stat -L -c "%U" "${dir}")
+if [[ -d ${dir} ]]; then
+owner=`stat -L -c %U ${dir}`
 if [[ ${owner} != ${user} ]]; then
-	echo "用户 ${user} 的家目录 ${dir} 由 {owner} 拥有。"
+	echo -e "\t用户 ${user} 家目录 ${dir} 的属主为 {owner}。" >> /tmp/output
 fi
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
-	echo -e "\n\t下列用户的家目录存在异常：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+if [[ -f /tmp/output ]]; then
+	echo -e "\n\t下列用户家目录的权限存在异常：" >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
-	echo -e "\n\t用户的家目录均由自己拥有。" >> ${REPORT}
+	echo -e "\n\t用户家目录的属主均为自己。" >> ${REPORT}
 fi
 rm -f /tmp/output
 echo "..........[OK]"
@@ -3037,26 +3020,24 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.10 检查用户的 dot files 是否非组可写或全局可写" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
+if [[ -d ${dir} ]]; then
 for file in ${dir}/.[A-Za-z0-9]*; do
 if [[ ! -h ${file} && -f ${file} ]]; then
 fileperm=`ls -ld ${file} | cut -f1 -d" "`
 if [[ `echo ${fileperm} | cut -c6` != "-" ]]; then
-echo "文件 $file 设置了组可写权限。"
+echo -e "\t用户 ${user} 家目录 ${dir} 中的 ${file} 文件设置了组可写权限。" >> ${REPORT}
 fi
 if [[ `echo ${fileperm} | cut -c9` != "-" ]]; then
-echo "文件 $file 设置了其他人可写权限。"
+echo -e "\t用户 ${user} 家目录 ${dir} 中的 ${file} 文件设置了其他人可写权限。" >> ${REPORT}
 fi
 fi
 done
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
-	echo -e "\n\t用户的 dot files 权限存在异常：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+if [[ -f /tmp/output ]]; then
+	echo -e "\n\t下列用户的 dot files 权限存在异常：" >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t用户的 dot files 均非组可写或全局可写。" >> ${REPORT}
 fi
@@ -3066,20 +3047,18 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.11 检查是否无用户有 .forward 文件" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
+if [[ -d ${dir} ]]; then
 if [[ ! -h ${dir}/.forward && -f ${dir}/.forward ]]; then
-echo "检测到 ${dir}/.forward 文件。"
+echo -e "\t用户 ${user} 有 .forward 文件。" >> /tmp/output
 fi
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .forward 文件：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
-	echo -e "\n\t无用户有 .forward 文件。" >> ${REPORT}
+	echo -e "\n\t所有用户均无 .forward 文件。" >> ${REPORT}
 fi
 rm -f /tmp/output
 echo "..........[OK]"
@@ -3087,20 +3066,18 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.12 检查是否无用户有 .netrc 文件" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
+if [[ -d ${dir} ]]; then
 if [[ ! -h ${dir}/.netrc && -f ${dir}/.netrc ]]; then
-echo "检测到 ${dir}/.netrc 文件。"
+echo -e "\t用户 ${user} 有 .netrc 文件。" >> /tmp/output
 fi
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .netrc 文件：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
-	echo -e "\n\t无用户有 .netrc 文件。" >> ${REPORT}
+	echo -e "\n\t所有用户均无 .netrc 文件。" >> ${REPORT}
 fi
 rm -f /tmp/output
 echo "..........[OK]"
@@ -3108,38 +3085,36 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.13 检查用户的 .netrc 文件是否非组访问或全局访问" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d "$dir" ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
-for file in $dir/.netrc; do
+if [[ -d ${dir} ]]; then
+for file in ${dir}/.netrc; do
 if [[ ! -h ${file} && -f ${file} ]]; then
 fileperm=`ls -ld ${file} | cut -f1 -d" "`
 if [[ `echo ${fileperm} | cut -c5` != "-" ]]; then
-echo "文件 $file 设置了组可读权限。"
+echo "用户 ${user} 的 .netrc 文件设置了组可读权限。" >> /tmp/output
 fi
 if [[ `echo ${fileperm} | cut -c6` != "-" ]]; then
-echo "文件 $file 设置了组可写权限。"
+echo "用户 ${user} 的 .netrc 文件设置了组可写权限。" >> /tmp/output
 fi
 if [[ `echo ${fileperm} | cut -c7` != "-" ]]; then
-echo "文件 $file 设置了组可执行权限。"
+echo "用户 ${user} 的 .netrc 文件设置了组可执行权限。" >> /tmp/output
 fi
 if [[ `echo ${fileperm} | cut -c8` != "-" ]]; then
-echo "文件 $file 设置了其他人可读权限。"
+echo "用户 ${user} 的 .netrc 文件设置了其他人可读权限。" >> /tmp/output
 fi
 if [[ `echo ${fileperm} | cut -c9` != "-" ]]; then
-echo "文件 $file 设置了其他人可写权限。"
+echo "用户 ${user} 的 .netrc 文件设置了其他人可写权限。" >> /tmp/output
 fi
 if [[ `echo ${fileperm} | cut -c10` != "-" ]]; then
-echo "文件 $file 设置了其他人可执行权限。"
+echo "用户 ${user} 的 .netrc 文件设置了其他人可执行权限。" >> /tmp/output
 fi
 fi
 done
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户的 .netrc 文件权限存在异常：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t用户的 .netrc 文件均非组访问或全局访问。" >> ${REPORT}
 fi
@@ -3149,22 +3124,20 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.14 检查是否无用户有 .rhosts 文件" | tee -a ${REPORT}
 cat /etc/passwd | egrep -v '^(root|halt|sync|shutdown)' | awk -F: '($7 != "/sbin/nologin" && $7 != "/bin/false") {print $1 " " $6}' | while read user dir; do
-if [[ ! -d ${dir} ]]; then
-echo "用户 ${user} 不存在家目录。"
-else
+if [[ -d ${dir} ]]; then
 for file in ${dir}/.rhosts; do
 if [[ ! -h ${file} && -f ${file} ]]; then
-echo "检测到 ${dir}/.rhosts" 文件。
+echo -e "\t用户 ${user} 有 .rhosts 文件。" >> /tmp/output
 fi
 done
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .rhosts 文件：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
-	echo -e "\n\t无用户有 .rhosts 文件。" >> ${REPORT}
+	echo -e "\n\t所有用户均无 .rhosts 文件。" >> ${REPORT}
 fi
 rm -f /tmp/output
 echo "..........[OK]"
@@ -3172,15 +3145,15 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.15 检查是否 /etc/passwd 中的所有组都存在于 /etc/group 中" | tee -a ${REPORT}
 for group in $(cut -s -d: -f4 /etc/passwd | sort -u ); do
-	grep -q -P "^.*?:[^:]*:$i:" /etc/group
+	grep -q -P "^.*?:[^:]*:${group}:" /etc/group
 	if [[ $? -ne 0 ]]; then
-		echo ${group} >> /tmp/group
+		echo -e "\t${group}" >> /tmp/group
 	fi
 done
 
 if [[ -f /tmp/group ]]; then
 	echo -e "\n\t/etc/group 中不存在下列组：" >> ${REPORT}
-	cat /tmp/group | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/group >> ${REPORT}
 else
 	echo -e "\n\t/etc/passwd 中的所有组都存在于 /etc/group 中。" >> ${REPORT}
 fi
@@ -3190,17 +3163,17 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.16 检查是否存在重复的 UID" | tee -a ${REPORT}
 cat /etc/passwd | cut -f3 -d":" | sort -n | uniq -c | while read x ; do
-[ -z "${x}" ] && break
-set - $x
+[[ -z ${x} ]] && break
+set -- ${x}
 if [[ $1 -gt 1 ]]; then
 users=`awk -F: '($3 == n) {print $1}' n=$2 /etc/passwd | xargs`
-echo "重复的 UID ($2): ${users}"
+echo -e "\t重复的 UID：$2 (${users})。" >> /tmp/output
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t存在重复的 UID 如下：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t不存在重复的 UID。" >> ${REPORT}
 fi
@@ -3210,17 +3183,17 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.17 检查是否存在重复的 GID" | tee -a ${REPORT}
 cat /etc/group | cut -f3 -d":" | sort -n | uniq -c | while read x ; do
-[ -z "${x}" ] && break
-set - $x
+[[ -z ${x} ]] && break
+set -- ${x}
 if [[ $1 -gt 1 ]]; then
 groups=`awk -F: '($3 == n) {print $1}' n=$2 /etc/group | xargs`
-echo "重复的 GID ($2): ${groups}"
+echo -e "\t重复的 GID：$2 (${groups})。" >> /tmp/output
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t存在重复的 GID 如下：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t不存在重复的 GID。" >> ${REPORT}
 fi
@@ -3230,17 +3203,17 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.18 检查是否存在重复的用户名" | tee -a ${REPORT}
 cat /etc/passwd | cut -f1 -d":" | sort -n | uniq -c | while read x ; do
-[ -z "${x}" ] && break
-set - $x
+[[ -z ${x} ]] && break
+set -- ${x}
 if [[ $1 -gt 1 ]]; then
 uids=`awk -F: '($1 == n) {print $3}' n=$2 /etc/passwd | xargs`
-echo "重复的用户名 ($2): ${uids}"
+echo -e "\t重复的用户名：$2 (${uids})。" >> /tmp/output
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t存在重复的用户名如下：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t不存在重复的用户名。" >> ${REPORT}
 fi
@@ -3250,17 +3223,17 @@ echo "" >> ${REPORT}
 
 echo -n "6.2.19 检查是否存在重复的组名" | tee -a ${REPORT}
 cat /etc/group | cut -f1 -d":" | sort -n | uniq -c | while read x ; do
-[ -z "${x}" ] && break
-set - $x
+[[ -z ${x} ]] && break
+set -- ${x}
 if [[ $1 -gt 1 ]]; then
 gids=`gawk -F: '($1 == n) {print $3}' n=$2 /etc/group | xargs`
-echo "重复的组名 ($2): ${gids}"
+echo "重复的组名：$2 (${gids})。" >> /tmp/output
 fi
-done > /tmp/output
+done
 
-if [[ -s /tmp/output ]]; then
+if [[ -f /tmp/output ]]; then
 	echo -e "\n\t存在重复的组名如下：" >> ${REPORT}
-	cat /tmp/output | sed 's/^/\t/g' >> ${REPORT}
+	cat /tmp/output >> ${REPORT}
 else
 	echo -e "\n\t不存在重复的组名。" >> ${REPORT}
 fi
