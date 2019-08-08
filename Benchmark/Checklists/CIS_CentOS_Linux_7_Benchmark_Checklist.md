@@ -72,7 +72,7 @@
 2.1.3 Ensure discard services are not enabled (Scored)  
 2.1.4 Ensure echo services are not enabled (Scored)  
 2.1.5 Ensure time services are not enabled (Scored)  
-2.1.6 Ensure tftp server is not enabled (Scored)	# (tcpmux?)  
+2.1.6 Ensure tftp server is not enabled (Scored)  
 2.1.7 Ensure xinetd is not enabled (Scored)  
 2.2 Special Purpose Services  
 2.2.1 Time Synchronization  
