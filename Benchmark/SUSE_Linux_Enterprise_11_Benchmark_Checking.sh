@@ -379,28 +379,6 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "1.2.3 检查 gpgcheck 是否已全局激活" | tee -a ${REPORT}
-grep -r ^gpgcheck /etc/yum* > /tmp/gpgchk
-if grep -q gpgcheck=0 /tmp/gpgchk; then
-	echo -e "\n\tgpgcheck 未全局激活。未激活 gpgcheck 的 repo 信息如下：" >> ${REPORT}
-	if grep -q '/etc/yum\.conf' /tmp/gpgchk; then
-		echo -e "\n\t/etc/yum.conf" >> ${REPORT}
-	fi
-	IFS_OLD=$IFS
-	IFS=$'\n'
-	for repofile in `grep gpgcheck=0 /tmp/gpgchk | cut -d: -f1 | uniq`; do
-		for reponame in `grep -B5 ^gpgcheck=0 ${repofile} |grep name`; do
-			echo -e "\t${repofile}:\t${reponame}" >> ${REPORT}
-		done
-	done
-	IFS=$IFS_OLD
-else
-	echo -e "\n\tgpgcheck 已全局激活。" >> ${REPORT}
-fi
-rm -f /tmp/gpgchk
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
 echo "1.3 文件系统完整性检查"
 echo -n "1.3.1 检查 AIDE 是否已安装" | tee -a ${REPORT}
 rpm -q aide &> /dev/null
@@ -589,24 +567,63 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "1.6.1.6 检查是否存在未在 SELinux 策略中定义的守护进程" | tee -a ${REPORT}
+echo -n "1.6.1.6 检查是否存在未在 SELinux 策略中限制的守护进程" | tee -a ${REPORT}
 ps -eZ | grep initrc | egrep -vw 'tr|ps|egrep|bash|awk' | tr ':' ' ' | awk '{print $NF}' > /tmp/unconfined_daemons 2> /dev/null
 if [[ -s /tmp/unconfined_daemons ]]; then
-	echo -e "\n\t未在 SELinux 策略中定义的守护进程如下：" >> ${REPORT}
+	echo -e "\n\t未在 SELinux 策略中限制的守护进程如下：" >> ${REPORT}
 	cat /tmp/unconfined_daemons | sed 's/^/\t/g' >> ${REPORT}
 else
-	echo -e "\n\t不存在未在 SELinux 策略中定义的守护进程。" >> ${REPORT}
+	echo -e "\n\t不存在未在 SELinux 策略中限制的守护进程。" >> ${REPORT}
 fi
 rm -f /tmp/unconfined_daemons
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "1.6.2 检查 SELinux 是否已安装" | tee -a ${REPORT}
-rpm -q libselinux &> /dev/null
+echo "1.6.2 配置 AppArmor"
+echo -n "1.6.2.1 检查在 bootloader 配置中是否未禁用 AppArmor" | tee -a ${REPORT}
+grep '^\s*kernel' /boot/grub/menu.lst | grep apparmor=0 &> /dev/null
+if [[ $? -ne 0 ]]; then
+	echo -e "\n\tbootloader 配置中未禁用 AppArmor。" >> ${REPORT}
+else
+	echo -e "\n\tbootloader 配置中禁用了 AppArmor。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "1.6.2.2 检查所有 AppArmor Profiles 是否为 enforcing" | tee -a ${REPORT}
+output1=`apparmor_status | grep 'profiles are loaded' | awk '{print $1}'`
+output2=`apparmor_status | grep 'profiles are in complain mode' | awk '{print $1}'`
+output3=`apparmor_status | grep 'processes are unconfined' | awk '{print $1}'`
+if [[ ${output1} -eq 0 ]]; then
+	echo -e "\n\t未加载任何 AppArmor Profiles。" >> ${REPORT}
+else
+	if [[ ${output2} -eq 0 ]]; then
+		echo -e "\n\t所有 AppArmor Profiles 均为 enforcing。" >> ${REPORT}
+	else
+		echo -e "\n\t存在 ${output2} 个 AppArmor Profiles 为 complain。" >> ${REPORT}
+	fi
+
+	if [[ ${output3} -eq 0 ]]; then
+		echo -e "\t所有 AppArmor 进程均已受限。" >> ${REPORT}
+	else
+		echo -e "\t存在 ${output3} 个 AppArmor 进程未受限。" >> ${REPORT}
+	fi
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "1.6.3 检查 SELinux 或 AppArmor 是否已安装" | tee -a ${REPORT}
+rpm -q libselinux1 &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo -e "\n\tSELinux 未安装。" >> ${REPORT}
 else
 	echo -e "\n\tSELinux 已安装。" >> ${REPORT}
+fi
+rpm -q apparmor-utils &> /dev/null
+if [[ $? -ne 0 ]]; then
+	echo -e "\n\tAppArmor 未安装。" >> ${REPORT}
+else
+	echo -e "\n\tAppArmor 已安装。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -812,22 +829,78 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-# CIS_CentOS_Linux_7_Benchmark_v2.2.0 中原为 tftp server，实际查看 xinetd 判断此处应为 tcpmux。
-echo -n "2.1.6 检查 tcpmux 服务是否未启用" | tee -a ${REPORT}
+
+echo -n "2.1.6 检查 rsh 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep tcpmux | grep on &> /dev/null
+	chkconfig --list 2> /dev/null | grep rsh | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "\n\ttcpmux 服务器已启用。" >> ${REPORT}
+		echo -e "\n\trsh 服务已启用。" >> ${REPORT}
 	else
-		echo -e "\n\ttcpmux 服务器未启用。" >> ${REPORT}
+		echo -e "\n\trsh 服务未启用。" >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "2.1.7 检查 xinetd 是否未启用" | tee -a ${REPORT}
+echo -n "2.1.7 检查 talk 服务器是否未启用" | tee -a ${REPORT}
+if [[ ${xinetdid} -eq 1 ]]; then
+	echo -e "\n\ttalk 未安装，跳过检查。" >> ${REPORT}
+else
+	chkconfig --list 2> /dev/null | grep talk | grep on &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\ttalk 服务已启用。" >> ${REPORT}
+	else
+		echo -e "\n\ttalk 服务未启用。" >> ${REPORT}
+	fi
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "2.1.8 检查 telnet 服务器是否未启用" | tee -a ${REPORT}
+if [[ ${xinetdid} -eq 1 ]]; then
+	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
+else
+	chkconfig --list 2> /dev/null | grep telnet | grep on &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\ttelnet 服务已启用。" >> ${REPORT}
+	else
+		echo -e "\n\ttelnet 服务未启用。" >> ${REPORT}
+	fi
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "2.1.9 检查 tftp 服务器是否未启用" | tee -a ${REPORT}
+if [[ ${xinetdid} -eq 1 ]]; then
+	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
+else
+	chkconfig --list 2> /dev/null | grep tftp | grep on &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\ttftp 服务已启用。" >> ${REPORT}
+	else
+		echo -e "\n\ttftp 服务未启用。" >> ${REPORT}
+	fi
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "2.1.10 检查 rsync 服务是否未启用" | tee -a ${REPORT}
+if [[ ${xinetdid} -eq 1 ]]; then
+	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
+else
+	chkconfig --list 2> /dev/null | grep rsync | grep on &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\trsync 服务已启用。" >> ${REPORT}
+	else
+		echo -e "\n\trsync 服务未启用。" >> ${REPORT}
+	fi
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "2.1.11 检查 xinetd 是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
@@ -1113,79 +1186,12 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "2.2.17 检查 rsh 服务器是否未启用" | tee -a ${REPORT}
-rpm -q rsh-server &> /dev/null
+echo -n "2.2.17 检查 rsync 服务是否未启用" | tee -a ${REPORT}
+chkconfig --list rsyncd | grpe on &> /dev/null
 if [[ $? -ne 0 ]]; then
-	echo -e "\n\trsh 服务器未安装，跳过检查。" >> ${REPORT}
+	echo "\n\trsync 服务未启用。" >> ${REPORT}
 else
-	output1=`systemctl is-enabled rsh.socket`
-	output2=`systemctl is-enabled rlogin.socket`
-	output3=`systemctl is-enabled rexec.socket`
-	if [[ ${output1} = "disabled" && ${output2} = "disabled" && ${output3} = "disabled" ]]; then
-		echo -e "\n\trsh 服务器未启用。" >> ${REPORT}
-	else
-		echo -e "\n\trsh 服务器已启用。" >> ${REPORT}
-	fi
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "2.2.18 检查 telnet 服务器是否未启用" | tee -a ${REPORT}
-rpm -q telnet-server &> /dev/null
-if [[ $? -ne 0 ]]; then
-	echo -e "\n\ttelnet 服务器未安装，跳过检查。" >> ${REPORT}
-else
-	systemctl is-enabled telnet.socket &> /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo -e "\n\ttelnet 服务器未启用。" >> ${REPORT}
-	else
-		echo -e "\n\ttelnet 服务器已启用。" >> ${REPORT}
-	fi
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "2.2.19 检查 tftp 服务器是否未启用" | tee -a ${REPORT}
-rpm -q tftp-server &> /dev/null
-if [[ $? -ne 0 ]]; then
-	echo -e "\n\ttftp 服务器未安装，跳过检查。" >> ${REPORT}
-else
-	systemctl is-enabled tftp.socket &> /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo -e "\n\ttftp 服务器未启用。" >> ${REPORT}
-	else
-		echo -e "\n\ttftp 服务器已启用。" >> ${REPORT}
-	fi
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "2.2.20 检查 rsync 服务是否未启用" | tee -a ${REPORT}
-rpm -q rsync &> /dev/null
-if [[ $? -ne 0 ]]; then
-	echo -e "\n\trsync 服务器未安装，跳过检查。" >> ${REPORT}
-else
-	systemctl is-enabled rsyncd &> /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo -e "\n\trsync 服务器未启用。" >> ${REPORT}
-	else
-		echo -e "\n\trsync 服务器已启用。" >> ${REPORT}
-	fi
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "2.2.21 检查 talk 服务器是否未启用" | tee -a ${REPORT}
-rpm -q talk-server &> /dev/null
-if [[ $? -ne 0 ]]; then
-	echo -e "\n\ttalk 服务器未安装，跳过检查。" >> ${REPORT}
-else
-	systemctl is-enabled ntalk &> /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo -e "\n\ttalk 服务器未启用。" >> ${REPORT}
-	else
-		echo -e "\n\ttalk 服务器已启用。" >> ${REPORT}
-	fi
+	echo "\n\trsync 服务已启用。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -2729,62 +2735,40 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.5 检查 /etc/gshadow 的权限是否已配置" | tee -a ${REPORT}
-perm=`stat -c %a/%A/%u/%U/%g/%G /etc/gshadow`
-if [[ ${perm} != "000/----------/0/root/0/root" ]]; then
-	echo -e "\n\t/etc/gshadow 的权限未按建议配置，当前权限如下：" >> ${REPORT}
-	stat /etc/gshadow | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
-else
-	echo -e "\n\t/etc/gshadow 的权限已配置。" >> ${REPORT}
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "6.1.6 检查 /etc/passwd- 的权限是否已配置" | tee -a ${REPORT}
-perm=`stat -c %a/%A/%u/%U/%g/%G /etc/passwd-`
+echo -n "6.1.5 检查 /etc/passwd.old 的权限是否已配置" | tee -a ${REPORT}
+perm=`stat -c %a/%A/%u/%U/%g/%G /etc/group`
 if [[ ${perm} != "644/-rw-r--r--/0/root/0/root" ]]; then
-	echo -e "\n\t/etc/passwd- 的权限未按建议配置，当前权限如下：" >> ${REPORT}
-	stat /etc/passwd- | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\t/etc/group 的权限未按建议配置，当前权限如下：" >> ${REPORT}
+	stat /etc/group | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
 else
-	echo -e "\n\t/etc/passwd- 的权限已配置。" >> ${REPORT}
+	echo -e "\n\t/etc/group 的权限已配置。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.7 检查 /etc/shadow- 的权限是否已配置" | tee -a ${REPORT}
-perm=`stat -c %a/%A/%u/%U/%g/%G /etc/shadow-`
-if [[ ${perm} != "000/----------/0/root/0/root" ]]; then
-	echo -e "\n\t/etc/shadow- 的权限未按建议配置，当前权限如下：" >> ${REPORT}
-	stat /etc/shadow- | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
-else
-	echo -e "\n\t/etc/shadow- 的权限已配置。" >> ${REPORT}
-fi
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "6.1.8 检查 /etc/group- 的权限是否已配置" | tee -a ${REPORT}
-perm=`stat -c %a/%A/%u/%U/%g/%G /etc/group-`
+echo -n "6.1.6 检查 /etc/shadow.old 的权限是否已配置" | tee -a ${REPORT}
+perm=`stat -c %a/%A/%u/%U/%g/%G /etc/shadow.old`
 if [[ ${perm} != "644/-rw-r--r--/0/root/0/root" ]]; then
-	echo -e "\n\t/etc/group- 的权限未按建议配置，当前权限如下：" >> ${REPORT}
-	stat /etc/group- | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\t/etc/shadow.old 的权限未按建议配置，当前权限如下：" >> ${REPORT}
+	stat /etc/shadow.old | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
 else
-	echo -e "\n\t/etc/group- 的权限已配置。" >> ${REPORT}
+	echo -e "\n\t/etc/shadow.old 的权限已配置。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.9 检查 /etc/gshadow- 的权限是否已配置" | tee -a ${REPORT}
-perm=`stat -c %a/%A/%u/%U/%g/%G /etc/gshadow-`
-if [[ ${perm} != "000/----------/0/root/0/root" ]]; then
-	echo -e "\n\t/etc/gshadow- 的权限未按建议配置，当前权限如下：" >> ${REPORT}
-	stat /etc/gshadow- | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
+echo -n "6.1.7 检查 /etc/group.old 的权限是否已配置" | tee -a ${REPORT}
+perm=`stat -c %a/%A/%u/%U/%g/%G /etc/group.old`
+if [[ ${perm} != "644/-rw-r--r--/0/root/0/root" ]]; then
+	echo -e "\n\t/etc/group.old 的权限未按建议配置，当前权限如下：" >> ${REPORT}
+	stat /etc/group.old | grep Access | head -n1 | sed 's/^/\t/g' >> ${REPORT}
 else
-	echo -e "\n\t/etc/gshadow- 的权限已配置。" >> ${REPORT}
+	echo -e "\n\t/etc/group.old 的权限已配置。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.10 检查是否存在全局可写文件" | tee -a ${REPORT}
+echo -n "6.1.8 检查是否存在全局可写文件" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type f -perm -0002 > /tmp/wfile
 if [[ -s /tmp/wfile ]]; then
 	echo -e "\n\t存在下列全局可写文件：" >> ${REPORT}
@@ -2796,7 +2780,7 @@ rm -f /tmp/wfile
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.11 检查是否存在无主文件或目录" | tee -a ${REPORT}
+echo -n "6.1.9 检查是否存在无主文件或目录" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nouser > /tmp/ufile
 if [[ -s /tmp/ufile ]]; then
 	echo -e "\n\t存在下列无主文件或目录：" >> ${REPORT}
@@ -2808,7 +2792,7 @@ rm -f /tmp/ufile
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.12 检查是否存在未分组文件或目录" | tee -a ${REPORT}
+echo -n "6.1.10 检查是否存在未分组文件或目录" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nogroup > /tmp/gfile
 if [[ -s /tmp/ufile ]]; then
 	echo -e "\n\t存在下列未分组文件或目录：" >> ${REPORT}
@@ -2820,13 +2804,13 @@ rm -f /tmp/gfile
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.13 审计 SUID 可执行文件" | tee -a ${REPORT}
+echo -n "6.1.11 审计 SUID 可执行文件" | tee -a ${REPORT}
 echo -e "\n\tSUID 可执行文件信息如下：" >> ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type f -perm -4000 | sed 's/^/\t/g' >> ${REPORT}
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "6.1.14 审计 SGID 可执行文件" | tee -a ${REPORT}
+echo -n "6.1.12 审计 SGID 可执行文件" | tee -a ${REPORT}
 echo -e "\n\tSGID 可执行文件信息如下：" >> ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type f -perm -2000 | sed 's/^/\t/g' >> ${REPORT}
 echo "..........[OK]"
@@ -3210,6 +3194,20 @@ fi
 rm -f /tmp/output
 echo "..........[OK]"
 echo "" >> ${REPORT}
+
+echo -n "6.2.20 检查 shadow 组是否为空" | tee -a ${REPORT}
+output1=`grep ^shadow:[^:]*:[^:]*:[^:]+ /etc/group`
+shadowgid=`grep -w ^shadow /etc/group | cut -d: -f3`
+output2=`awk -F: '($4 == shadowgid) {print $1}' shadowgid=${shadowgid} /etc/passwd`
+if [[ ${output1} = "" && ${output2} = "" ]]; then
+	echo -e "\n\tshadow 组为空。" >> ${REPORT}
+else
+	echo -e "\n\tshadow 组存在以下用户：" >> ${REPORT}
+	echo ${output2} | sed 's/^/\t/g' >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
 echo "--------------------------------------------------"
 echo "执行结束，检测结果已保存至 ${REPORT}。"
 echo
