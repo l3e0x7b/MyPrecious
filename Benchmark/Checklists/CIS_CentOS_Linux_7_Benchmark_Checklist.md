@@ -1,4 +1,4 @@
-1 Initial Setup
+1 Initial Setup  
 1.1 Filesystem Configuration
 1.1.1 Disable unused filesystems
 1.1.1.1 Ensure mounting of cramfs filesystems is disabled (Scored)
