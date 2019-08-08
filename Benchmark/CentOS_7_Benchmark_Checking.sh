@@ -589,13 +589,13 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "1.6.1.6 检查是否存在未在 SELinux 策略中定义的守护进程" | tee -a ${REPORT}
+echo -n "1.6.1.6 检查是否存在未在 SELinux 策略中限制的守护进程" | tee -a ${REPORT}
 ps -eZ | grep initrc | egrep -vw 'tr|ps|egrep|bash|awk' | tr ':' ' ' | awk '{print $NF}' > /tmp/unconfined_daemons 2> /dev/null
 if [[ -s /tmp/unconfined_daemons ]]; then
-	echo -e "\n\t未在 SELinux 策略中定义的守护进程如下：" >> ${REPORT}
+	echo -e "\n\t未在 SELinux 策略中限制的守护进程如下：" >> ${REPORT}
 	cat /tmp/unconfined_daemons | sed 's/^/\t/g' >> ${REPORT}
 else
-	echo -e "\n\t不存在未在 SELinux 策略中定义的守护进程。" >> ${REPORT}
+	echo -e "\n\t不存在未在 SELinux 策略中限制的守护进程。" >> ${REPORT}
 fi
 rm -f /tmp/unconfined_daemons
 echo "..........[OK]"
@@ -812,16 +812,15 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-# CIS_CentOS_Linux_7_Benchmark_v2.2.0 中原为 tftp server，实际查看 xinetd 判断此处应为 tcpmux。
-echo -n "2.1.6 检查 tcpmux 服务是否未启用" | tee -a ${REPORT}
+echo -n "2.1.6 检查 tftp 服务器是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep tcpmux | grep on &> /dev/null
+	chkconfig --list 2> /dev/null | grep tftp | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "\n\ttcpmux 服务器已启用。" >> ${REPORT}
+		echo -e "\n\ttftp 服务器已启用。" >> ${REPORT}
 	else
-		echo -e "\n\ttcpmux 服务器未启用。" >> ${REPORT}
+		echo -e "\n\ttftp 服务器未启用。" >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
@@ -1145,16 +1144,16 @@ fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "2.2.19 检查 tftp 服务器是否未启用" | tee -a ${REPORT}
+echo -n "2.2.19 检查 tftp 服务器 (tftp.socket) 是否未启用" | tee -a ${REPORT}
 rpm -q tftp-server &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo -e "\n\ttftp 服务器未安装，跳过检查。" >> ${REPORT}
 else
 	systemctl is-enabled tftp.socket &> /dev/null
 	if [[ $? -ne 0 ]]; then
-		echo -e "\n\ttftp 服务器未启用。" >> ${REPORT}
+		echo -e "\n\ttftp 服务器 (tftp.socket) 未启用。" >> ${REPORT}
 	else
-		echo -e "\n\ttftp 服务器已启用。" >> ${REPORT}
+		echo -e "\n\ttftp 服务器 (tftp.socket) 已启用。" >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
@@ -3196,7 +3195,7 @@ cat /etc/group | cut -f1 -d":" | sort -n | uniq -c | while read x ; do
 [[ -z ${x} ]] && break
 set -- ${x}
 if [[ $1 -gt 1 ]]; then
-gids=`gawk -F: '($1 == n) {print $3}' n=$2 /etc/group | xargs`
+gids=`awk -F: '($1 == n) {print $3}' n=$2 /etc/group | xargs`
 echo "重复的组名：$2 (${gids})。" >> /tmp/output
 fi
 done
