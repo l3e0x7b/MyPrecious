@@ -77,7 +77,7 @@
 2.1.6 Ensure rsh server is not enabled (Scored)  
 2.1.7 Ensure talk server is not enabled (Scored)  
 2.1.8 Ensure telnet server is not enabled (Scored)  
-2.1.9 Ensure tftp server is not enabled (Scored)	# (tcpmux?)  
+2.1.9 Ensure tftp server is not enabled (Scored)  
 2.1.10 Ensure rsync service is not enabled (Scored)  
 2.1.11 Ensure xinetd is not enabled (Scored)  
 2.2 Special Purpose Services  
