@@ -121,7 +121,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.2 检查 /tmp 是否为独立分区" | tee -a ${REPORT}
-mount | grep /tmp &> /dev/null
+mount | grep '/tmp ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	tmpid=0
 	echo -e "\n\t/tmp 为独立分区。" >> ${REPORT}
@@ -136,7 +136,7 @@ echo -n "1.1.3 检查是否已在 /tmp 分区设置 nodev 选项" | tee -a ${REP
 if [[ ${tmpid} -eq 1 ]]; then
 	echo -e "\n\t/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /tmp | grep nodev &> /dev/null
+	mount | grep '/tmp ' | grep nodev &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /tmp 分区设置 nodev 选项。" >> ${REPORT}
 	else
@@ -150,7 +150,7 @@ echo -n "1.1.4 检查是否已在 /tmp 分区设置 nosuid 选项" | tee -a ${RE
 if [[ ${tmpid} -eq 1 ]]; then
 	echo -e "\n\t/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /tmp | grep nosuid &> /dev/null
+	mount | grep '/tmp ' | grep nosuid &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /tmp 分区设置 nosuid 选项。" >> ${REPORT}
 	else
@@ -164,7 +164,7 @@ echo -n "1.1.5 检查是否已在 /tmp 分区设置 noexec 选项" | tee -a ${RE
 if [[ ${tmpid} -eq 1 ]]; then
 	echo -e "\n\t/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /tmp | grep noexec &> /dev/null
+	mount | grep '/tmp ' | grep noexec &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /tmp 分区设置 noexec 选项。" >> ${REPORT}
 	else
@@ -175,7 +175,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.6 检查 /var 是否为独立分区" | tee -a ${REPORT}
-mount | grep /var &> /dev/null
+mount | grep '/var ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t/var 为独立分区。" >> ${REPORT}
 else
@@ -185,7 +185,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.7 检查 /var/tmp 是否为独立分区" | tee -a ${REPORT}
-mount | grep /var/tmp &> /dev/null
+mount | grep '/var/tmp ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	vtmpid=0
 	echo -e "\n\t/var/tmp 为独立分区。" >> ${REPORT}
@@ -200,7 +200,7 @@ echo -n "1.1.8 检查是否已在 /var/tmp 分区设置 nodev 选项" | tee -a $
 if [[ ${vtmpid} -eq 1 ]]; then
 	echo -e "\n\t/var/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /var/tmp | grep nodev &> /dev/null
+	mount | grep '/var/tmp ' | grep nodev &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /var/tmp 分区设置 nodev 选项。" >> ${REPORT}
 	else
@@ -214,7 +214,7 @@ echo -n "1.1.9 检查是否已在 /var/tmp 分区设置 nosuid 选项" | tee -a 
 if [[ ${vtmpid} -eq 1 ]]; then
 	echo -e "\n\t/var/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /var/tmp | grep nosuid &> /dev/null
+	mount | grep '/var/tmp ' | grep nosuid &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /var/tmp 分区设置 nosuid 选项。" >> ${REPORT}
 	else
@@ -228,7 +228,7 @@ echo -n "1.1.10 检查是否已在 /var/tmp 分区设置 noexec 选项" | tee -a
 if [[ ${vtmpid} -eq 1 ]]; then
 	echo -e "\n\t/var/tmp 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /var/tmp | grep noexec &> /dev/null
+	mount | grep '/var/tmp ' | grep noexec &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /var/tmp 分区设置 noexec 选项。" >> ${REPORT}
 	else
@@ -239,7 +239,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.11 检查 /var/log 是否为独立分区" | tee -a ${REPORT}
-mount | grep /var/log &> /dev/null
+mount | grep '/var/log ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t/var/log 为独立分区。" >> ${REPORT}
 else
@@ -249,7 +249,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.12 检查 /var/log/audit 是否为独立分区" | tee -a ${REPORT}
-mount | grep /var/log/audit &> /dev/null
+mount | grep '/var/log/audit ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t/var/log/audit 为独立分区。" >> ${REPORT}
 else
@@ -259,7 +259,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.13 检查 /home 是否为独立分区" | tee -a ${REPORT}
-mount | grep /home &> /dev/null
+mount | grep '/home ' &> /dev/null
 if [[ $? -eq 0 ]]; then
 	homeid=0
 	echo -e "\n\t/home 为独立分区。" >> ${REPORT}
@@ -274,7 +274,7 @@ echo -n "1.1.14 检查是否已在 /home 分区设置 nodev 选项" | tee -a ${R
 if [[ ${homeid} -eq 1 ]]; then
 	echo -e "\n\t/home 非独立分区，跳过检查。" >> ${REPORT}
 else
-	mount | grep /home | grep nodev &> /dev/null
+	mount | grep '/home ' | grep nodev &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\t已在 /home 分区设置 nodev 选项。" >> ${REPORT}
 	else
@@ -285,7 +285,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.15 检查是否已在 /dev/shm 分区设置 nodev 选项" | tee -a ${REPORT}
-mount | grep /dev/shm | grep nodev &> /dev/null
+mount | grep '/dev/shm ' | grep nodev &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t已在 /dev/shm 分区设置 nodev 选项。" >> ${REPORT}
 else
@@ -295,7 +295,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.16 检查是否已在 /dev/shm 分区设置 nosuid 选项" | tee -a ${REPORT}
-mount | grep /dev/shm | grep nosuid &> /dev/null
+mount | grep '/dev/shm ' | grep nosuid &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t已在 /dev/shm 分区设置 nosuid 选项。" >> ${REPORT}
 else
@@ -305,7 +305,7 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.1.17 检查是否已在 /dev/shm 分区设置 noexec 选项" | tee -a ${REPORT}
-mount | grep /dev/shm | grep noexec &> /dev/null
+mount | grep '/dev/shm ' | grep noexec &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t已在 /dev/shm 分区设置 noexec 选项。" >> ${REPORT}
 else
@@ -1423,28 +1423,43 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo "3.3 IPv6"
-echo -n "3.3.1 检查是否已拒绝 IPv6 路由广播" | tee -a ${REPORT}
-output1=`cat /proc/sys/net/ipv6/conf/all/accept_ra`
-output2=`cat /proc/sys/net/ipv6/conf/default/accept_ra`
-output3=`grep 'net\.ipv6\.conf\.all\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv6\.conf\.default\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
-	echo -e "\n\tIPv6 路由广播已禁用。" >> ${REPORT}
+ip addr | grep inet6 &> /dev/null
+if [[ $? -eq 0 ]]; then
+	ipv6=0
 else
-	echo -e "\n\tIPv6 路由广播未禁用。" >> ${REPORT}
+	ipv6=1
+fi
+
+echo -n "3.3.1 检查是否已拒绝 IPv6 路由广播" | tee -a ${REPORT}
+if [[ ${ipv6} -eq 0 ]]; then
+	output1=`cat /proc/sys/net/ipv6/conf/all/accept_ra`
+	output2=`cat /proc/sys/net/ipv6/conf/default/accept_ra`
+	output3=`grep 'net\.ipv6\.conf\.all\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output4=`grep 'net\.ipv6\.conf\.default\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
+		echo -e "\n\tIPv6 路由广播已禁用。" >> ${REPORT}
+	else
+		echo -e "\n\tIPv6 路由广播未禁用。" >> ${REPORT}
+	fi
+else
+	echo -e "\n\tIPv6已禁用，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "3.3.2 检查是否已拒绝 IPv6 重定向" | tee -a ${REPORT}
-output1=`cat /proc/sys/net/ipv6/conf/all/accept_redirects`
-output2=`cat /proc/sys/net/ipv6/conf/default/accept_redirects`
-output3=`grep 'net\.ipv6\.conf\.all\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv6\.conf\.default\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
-	echo -e "\n\tIPv6 重定向已禁用。" >> ${REPORT}
+if [[ ${ipv6} -eq 0 ]]; then
+	output1=`cat /proc/sys/net/ipv6/conf/all/accept_redirects`
+	output2=`cat /proc/sys/net/ipv6/conf/default/accept_redirects`
+	output3=`grep 'net\.ipv6\.conf\.all\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output4=`grep 'net\.ipv6\.conf\.default\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
+		echo -e "\n\tIPv6 重定向已禁用。" >> ${REPORT}
+	else
+		echo -e "\n\tIPv6 重定向未禁用。" >> ${REPORT}
+	fi
 else
-	echo -e "\n\tIPv6 重定向未禁用。" >> ${REPORT}
+	echo -e "\n\tIPv6已禁用，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -1452,6 +1467,12 @@ echo "" >> ${REPORT}
 echo -n "3.3.3 检查 IPv6 是否已禁用" | tee -a ${REPORT}
 grep '^\s*linux' /boot/grub2/grub.cfg | grep 'ipv6\.disable=1' &> /dev/null
 if [[ $? -eq 0 ]]; then
+	echo -e "\n\tbootloader 配置中已禁用 IPv6。" >> ${REPORT}
+else
+	echo -e "\n\tbootloader 配置中未禁用 IPv6。" >> ${REPORT}
+fi
+
+if [[ ${ipv6} -eq 1 ]]; then
 	echo -e "\n\tIPv6 已禁用。" >> ${REPORT}
 else
 	echo -e "\n\tIPv6 未禁用。" >> ${REPORT}
