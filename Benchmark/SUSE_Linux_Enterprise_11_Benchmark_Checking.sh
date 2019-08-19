@@ -10,7 +10,7 @@ clear
 /usr/bin/id | grep uid=0 &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo "当前非 root 登录，请切换至 root 后再执行此脚本！"
- 	exit
+	exit
 fi 
 
 LANG_OLD=$LANG
