@@ -1,5 +1,17 @@
 #!/bin/bash
 
+clear
+date=$(date +%Y%m%d_%H%M%S)
+red_fg_prefix="\e[31m"
+green_fg_prefix="\e[32m"
+yello_fg_prefix="\e[33m"
+magenta_fg_prefix="\e[35m"
+cyan_fg_prefix="\e[36m"
+fg_suffix="\e[0m"
+failed_flag="${red_fg_prefix}........................................[FAILED]${fg_suffix}"
+ok_flag="${green_fg_prefix}........................................[OK]${fg_suffix}"
+skip_flag="${yello_fg_prefix}........................................[SKIP]${fg_suffix}"
+
 echo && echo -e "${cyan_fg_prefix}############## Task List ##############
 # Hostname Configuration              #
 # Network Configuration               #
@@ -17,17 +29,6 @@ echo && echo -e "${cyan_fg_prefix}############## Task List ##############
 # Tasks Check*                        #
 # Reboot*                             #
 #######################################${fg_suffix}" && echo
-
-date=$(date +%Y%m%d_%H%M%S)
-red_fg_prefix="\e[31m"
-green_fg_prefix="\e[32m"
-yello_fg_prefix="\e[33m"
-magenta_fg_prefix="\e[35m"
-cyan_fg_prefix="\e[36m"
-fg_suffix="\e[0m"
-failed_flag="${red_fg_prefix}........................................[FAILED]${fg_suffix}"
-ok_flag="${green_fg_prefix}........................................[OK]${fg_suffix}"
-skip_flag="${yello_fg_prefix}........................................[SKIP]${fg_suffix}"
 
 read -n 1 -p "The program is ready to configure your system(s), press any key to start: "
 
