@@ -32,7 +32,7 @@ echo "检测结果" >> ${REPORT}
 echo "--------------------------------------------------" | tee -a ${REPORT}
 echo "1 初始设置" | tee -a ${REPORT}
 echo "1.1 文件系统配置"
-echo "1.1.1 检查禁用未使用的文件系统"
+echo "1.1.1 禁用未使用的文件系统"
 echo -n "1.1.1.1 检查 cramfs 文件系统是否已禁用" | tee -a ${REPORT}
 output=`modprobe -n -v cramfs 2> /dev/null`
 lsmod | grep cramfs &> /dev/null
@@ -340,7 +340,7 @@ echo -n "1.1.21 检查是否已在所有全局可写的目录上设置粘滞位"
 df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d \( -perm -0002 -a ! -perm -1000 \) > /tmp/wwd_nsb_list 2> /dev/null
 if [[ -s /tmp/wwd_nsb_list ]]; then
 	echo -e "\n\t未设置粘滞位的全局可写目录信息如下：" >> ${REPORT}
-	cat /tmp/wwd_nsb_list | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/wwd_nsb_list >> ${REPORT}
 else
 	echo -e "\n\t不存在未设置粘滞位的全局可写目录。" >> ${REPORT}
 fi
@@ -413,12 +413,12 @@ echo "" >> ${REPORT}
 echo "1.3 文件系统完整性检查"
 echo -n "1.3.1 检查 AIDE 是否已安装" | tee -a ${REPORT}
 rpm -q aide &> /dev/null
-if [[ $? -eq 0 ]]; then
+if [[ $? -ne 0 ]]; then
 	aideid=0
-	echo -e "\n\tAIDE 已安装。" >> ${REPORT}
+	echo -e "\n\tAIDE 未安装。" >> ${REPORT}
 else
 	aideid=1
-	echo -e "\n\tAIDE 未安装。" >> ${REPORT}
+	echo -e "\n\tAIDE 已安装。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -490,8 +490,8 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.4.3 检查是否已配置单用户模式要求认证" | tee -a ${REPORT}
-output1=`grep /sbin/sulogin /usr/lib/systemd/system/rescue.service`
-output2=`grep /sbin/sulogin /usr/lib/systemd/system/emergency.service`
+output1=`egrep -v '^\s*#|^$' /usr/lib/systemd/system/rescue.service | grep /sbin/sulogin`
+output2=`egrep -v '^\s*#|^$' /usr/lib/systemd/system/emergency.service | grep /sbin/sulogin`
 if [[ ${output1} = "" || ${output2} = "" ]]; then
 	echo -e "\n\t未配置单用户模式要求认证。" >> ${REPORT}
 else
@@ -504,16 +504,27 @@ echo "1.5 额外流程强化"
 echo -n "1.5.1 检查是否已限制核心转储" | tee -a ${REPORT}
 output=`ulimit -c 2> /dev/null`
 if [[ ${output} -eq 0 ]]; then
-	echo -e "\n\t未开启核心转储，跳过检查。" >> ${REPORT}
+	echo -e "\n\t核心转储未开启，跳过检查。" >> ${REPORT}
 else
-	output1=`egrep '^\*\s+hard\s+core\s+0' /etc/security/limits.conf /etc/security/limits.d/*`
-	output2=`sysctl fs.suid_dumpable | cut -d" " -f3`
-	output3=`grep '^fs\.suid_dumpable\s*=\s*0' /etc/sysctl.conf /etc/sysctl.d/*`
-
-	if [[ ${output1} = "" || ${output2} -ne "0" || ${output3} = "" ]]; then
-		echo -e "\n\t未限制核心转储。" >> ${REPORT}
+	output1=`sysctl fs.suid_dumpable | cut -d" " -f3`
+	if [[ ${output1} -eq 0 ]]; then
+		echo -e "\n\t当前已限制核心转储。" >> ${REPORT}
 	else
-		echo -e "\n\t已限制核心转储。" >> ${REPORT}
+		echo -e "\n\t当前未限制核心转储。" >> ${REPORT}
+	fi
+
+	egrep '^\*\s+hard\s+core\s+0' /etc/security/limits.conf /etc/security/limits.d/* &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\t已在配置文件 /etc/security/limits.conf、/etc/security/limits.d/* 中配置核心转储限制。" >> ${REPORT}
+	else
+		echo -e "\n\t未在配置文件 /etc/security/limits.conf、/etc/security/limits.d/* 中配置核心转储限制。" >> ${REPORT}
+	fi
+
+	grep '^fs\.suid_dumpable\s*=\s*0' /etc/sysctl.conf /etc/sysctl.d/* &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		echo -e "\n\t已在配置文件 /etc/sysctl.conf 或 /etc/sysctl.d/* 中配置核心转储限制。" >> ${REPORT}
+	else
+		echo -e "\n\t未在配置文件 /etc/sysctl.conf 或 /etc/sysctl.d/* 中配置核心转储限制。" >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
@@ -530,12 +541,18 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "1.5.3 检查 ASLR 是否已启用" | tee -a ${REPORT}
-output1=`sysctl kernel.randomize_va_space | cut -d" " -f3`
-output2=`grep 'kernel\.randomize_va_space\s*=\s*2' /etc/sysctl.conf /etc/sysctl.d/*`
-if [[ ${output1} -ne 2 || ${output2} = "" ]]; then
-	echo -e "\n\tASLR 未启用。" >> ${REPORT}
+output=`sysctl kernel.randomize_va_space | cut -d" " -f3`
+if [[ ${output} -eq 2 ]]; then
+	echo -e "\n\t当前已启用 ASLR。" >> ${REPORT}
 else
-	echo -e "\n\tASLR 已启用。" >> ${REPORT}
+	echo -e "\n\t当前未启用 ASLR。" >> ${REPORT}
+fi
+
+grep '^kernel\.randomize_va_space\s*=\s*2' /etc/sysctl.conf /etc/sysctl.d/* &> /dev/null
+if [[ $? -eq 0 ]]; then
+	echo -e "\n\t已在配置文件 /etc/sysctl.conf 或 /etc/sysctl.d/* 中配置启用 ASLR。" >> ${REPORT}
+else
+	echo -e "\n\t未在配置文件 /etc/sysctl.conf 或 /etc/sysctl.d/* 中配置启用 ASLR。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -552,16 +569,16 @@ echo "" >> ${REPORT}
 
 echo "1.6 强制访问控制"
 echo "1.6.1 配置 SELinux"
-echo -n "1.6.1.1 检查在 bootloader 配置中是否未禁用 Selinux" | tee -a ${REPORT}
+echo -n "1.6.1.1 检查在 bootloader 配置中是否未禁用 SELinux" | tee -a ${REPORT}
 if [[ ${grubid} -eq 0 ]]; then
 	grep '^\s*linux' /boot/grub2/grub.cfg | egrep 'selinux=0|enforcing=0' &> /dev/null
 	if [[ $? -ne 0 ]]; then
-		echo -e "\n\tbootloader 配置 (/boot/grub2/grub.cfg) 中未禁用 Selinux。" >> ${REPORT}
+		echo -e "\n\tbootloader 配置 (/boot/grub2/grub.cfg) 中未禁用 SELinux。" >> ${REPORT}
 	else
-		echo -e "\n\tbootloader 配置 (/boot/grub2/grub.cfg) 中禁用了 Selinux。" >> ${REPORT}
+		echo -e "\n\tbootloader 配置 (/boot/grub2/grub.cfg) 中禁用了 SELinux。" >> ${REPORT}
 	fi
 else
-	echo -e "\n\t未找到 grub bootloader，请手动检查 LILO 或其他 bootloader 的配置中是否未禁用 Selinux。" >> ${REPORT}
+	echo -e "\n\t未找到 grub bootloader，请手动检查 LILO 或其他 bootloader 的配置中是否未禁用 SELinux。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -635,7 +652,7 @@ echo -n "1.6.1.6 检查是否存在未在 SELinux 策略中限制的守护进程
 ps -eZ | grep initrc | egrep -vw 'tr|ps|egrep|bash|awk' | tr ':' ' ' | awk '{print $NF}' > /tmp/unconfined_daemons 2> /dev/null
 if [[ -s /tmp/unconfined_daemons ]]; then
 	echo -e "\n\t未在 SELinux 策略中限制的守护进程如下：" >> ${REPORT}
-	cat /tmp/unconfined_daemons | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/unconfined_daemons >> ${REPORT}
 else
 	echo -e "\n\t不存在未在 SELinux 策略中限制的守护进程。" >> ${REPORT}
 fi
@@ -660,7 +677,7 @@ egrep '(\\v|\\r|\\m|\\s)' /etc/motd &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t今日消息未正确配置，配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/motd:" >> ${REPORT}
-	cat /etc/motd | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/motd >> ${REPORT}
 else
 	echo -e "\n\t今日消息已正确配置。" >> ${REPORT}
 fi
@@ -672,7 +689,7 @@ egrep '(\\v|\\r|\\m|\\s)' /etc/issue &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t本地登录的警告横幅未正确配置，配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/issue:" >> ${REPORT}
-	cat /etc/issue | sed -e '/^$/d; s/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/issue >> ${REPORT}
 else
 	echo -e "\n\t本地登录的警告横幅已正确配置。" >> ${REPORT}
 fi
@@ -684,7 +701,7 @@ egrep '(\\v|\\r|\\m|\\s)' /etc/issue.net &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t远程登录的警告横幅未正确配置，配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/issue.net:" >> ${REPORT}
-	cat /etc/issue.net | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/issue.net >> ${REPORT}
 else
 	echo -e "\n\t远程登录的警告横幅已正确配置。" >> ${REPORT}
 fi
@@ -731,12 +748,12 @@ if [[ $? -ne 0 ]]; then
 else
 	if [[ -f /etc/dconf/profile/gdm ]]; then
 		cat /etc/dconf/profile/gdm > /tmp/gdm
-		if grep -q user-db:user /tmp/gdm && grep -q system-db:gdm /tmp/gdm && grep -q file-db:/usr/share/gdm/greeter-dconf-defaults /tmp/gdm; then
+		if grep -q ^user-db:user /tmp/gdm && grep -q ^system-db:gdm /tmp/gdm && grep -q ^file-db:/usr/share/gdm/greeter-dconf-defaults /tmp/gdm; then
 			echo -e "\n\t/etc/dconf/profile/gdm 文件配置正确。" >> ${REPORT}
 
 			if [[ -d /etc/dconf/db/gdm.d ]]; then
-				output1=`grep -r banner-message-enable=true /etc/dconf/db/gdm.d/* 2> /dev/null`
-				output2=`grep -r banner-message-text /etc/dconf/db/gdm.d/* 2> /dev/null`
+				output1=`grep -r ^banner-message-enable=true /etc/dconf/db/gdm.d/* 2> /dev/null`
+				output2=`grep -r ^banner-message-text /etc/dconf/db/gdm.d/* 2> /dev/null`
 				if [[ ${output1} = "" || ${output2} = "" ]]; then
 					echo -e "\tGDM 的登录横幅配置不正确。" >> ${REPORT}
 				else
@@ -770,7 +787,7 @@ else
 			echo -e "\n\t补丁和额外的安全软件均已安装。" >> ${REPORT}
 		else
 			echo -e "\n\t需要更新的补丁或安全软件信息如下：" >> ${REPORT}
-			yum check-update --security | egrep -v 'Load|\*|updateinfo' | sed 's/^/\t/g' >> ${REPORT}
+			yum check-update --security | egrep -v 'Load|\*|updateinfo' | sed -e '/^$/d; s/^/\t/g' >> ${REPORT}
 		fi
 
 		if [[ ${output2} = "" ]]; then
@@ -797,7 +814,7 @@ echo -n "2.1.1 检查 chargen 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep chargen | grep on &> /dev/null
+	chkconfig --list chargen 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\tchargen 服务已启用。" >> ${REPORT}
 	else
@@ -811,7 +828,7 @@ echo -n "2.1.2 检查 daytime 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep daytime | grep on &> /dev/null
+	chkconfig --list daytime 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\tdaytime 服务已启用。" >> ${REPORT}
 	else
@@ -825,7 +842,7 @@ echo -n "2.1.3 检查 discard 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep discard | grep on &> /dev/null
+	chkconfig --list discard 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\tdiscard 服务已启用。" >> ${REPORT}
 	else
@@ -839,7 +856,7 @@ echo -n "2.1.4 检查 echo 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep echo | grep on &> /dev/null
+	chkconfig --list echo 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\techo 服务已启用。" >> ${REPORT}
 	else
@@ -853,7 +870,7 @@ echo -n "2.1.5 检查 time 服务是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep time | grep on &> /dev/null
+	chkconfig --list time 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\ttime 服务已启用。" >> ${REPORT}
 	else
@@ -867,7 +884,7 @@ echo -n "2.1.6 检查 tftp 服务器是否未启用" | tee -a ${REPORT}
 if [[ ${xinetdid} -eq 1 ]]; then
 	echo -e "\n\txinetd 未安装，跳过检查。" >> ${REPORT}
 else
-	chkconfig --list 2> /dev/null | grep tftp | grep on &> /dev/null
+	chkconfig --list tftp 2> /dev/null | grep on &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "\n\ttftp 服务器已启用。" >> ${REPORT}
 	else
@@ -921,7 +938,7 @@ if [[ ${ntpid} -eq 1 ]]; then
 else
 	if [[ -s /etc/ntp.conf ]]; then
 		echo -e "\n\tntp (/etc/ntp.conf) 配置如下：" >> ${REPORT}
-		egrep -v '^\s*#|^$' /etc/ntp.conf | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+		sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/ntp.conf >> ${REPORT}
 	else
 		echo -e "\n\tntp (/etc/ntp.conf) 未配置。" >> ${REPORT}
 	fi
@@ -945,7 +962,7 @@ if [[ ${chronyid} -eq 1 ]]; then
 else
 	if [[ -s /etc/chrony.conf ]]; then
 		echo -e "\n\tchrony (/etc/chrony.conf) 配置如下：" >> ${REPORT}
-		egrep -v '^\s*#|^$' /etc/chrony.conf | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+		sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/chrony.conf >> ${REPORT}
 	else
 		echo -e "\n\tchrony (/etc/chrony.conf) 未配置。" >> ${REPORT}
 	fi
@@ -1044,13 +1061,13 @@ fi
 
 rpm -q rpcbind &> /dev/null
 if [[ $? -ne 0 ]]; then
-	echo -e "\n\tRPC 服务未安装，跳过检查。" >> ${REPORT}
+	echo -e "\tRPC 服务未安装，跳过检查。" >> ${REPORT}
 else
 	systemctl is-enabled rpcbind &> /dev/null
 	if [[ $? -ne 0 ]]; then
-		echo -e "\n\tRPC 服务未启用。" >> ${REPORT}
+		echo -e "\tRPC 服务未启用。" >> ${REPORT}
 	else
-		echo -e "\n\tRPC 服务已启用。" >> ${REPORT}
+		echo -e "\tRPC 服务已启用。" >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
@@ -1319,7 +1336,7 @@ echo "3 网络配置" | tee -a ${REPORT}
 echo "3.1 网络参数 (Host Only)"
 echo -n "3.1.1 检查 IP 转发是否已禁用" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/ip_forward`
-output2=`grep 'net\.ipv4\.ip_forward\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output2=`grep '^net\.ipv4\.ip_forward\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 0 && ${output2} = "" ]]; then
 	echo -e "\n\tIP 转发已禁用。" >> ${REPORT}
 else
@@ -1331,8 +1348,8 @@ echo "" >> ${REPORT}
 echo -n "3.1.2 检查数据包重定向发送是否已禁用" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/send_redirects`
 output2=`cat /proc/sys/net/ipv4/conf/default/send_redirects`
-output3=`grep 'net\.ipv4\.conf\.all\.send_redirects\s*=\s*1' /etc/sysctl.conf`
-output4=`grep 'net\.ipv4\.conf\.default\.send_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.send_redirects\s*=\s*1' /etc/sysctl.conf`
+output4=`grep '^net\.ipv4\.conf\.default\.send_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 	echo -e "\n\t数据包重定向发送已禁用。" >> ${REPORT}
 else
@@ -1345,8 +1362,8 @@ echo "3.2 网络参数 (Host and Router)"
 echo -n "3.2.1 检查是否已禁用源路由数据包" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/accept_source_route`
 output2=`cat /proc/sys/net/ipv4/conf/default/accept_source_route`
-output3=`grep 'net\.ipv4\.conf\.all\.accept_source_route\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv4\.conf\.default\.accept_source_route\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.accept_source_route\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output4=`grep '^net\.ipv4\.conf\.default\.accept_source_route\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 	echo -e "\n\t源路由数据包已禁用。" >> ${REPORT}
 else
@@ -1358,8 +1375,8 @@ echo "" >> ${REPORT}
 echo -n "3.2.2 检查是否已禁用 ICMP 重定向" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/accept_redirects`
 output2=`cat /proc/sys/net/ipv4/conf/default/accept_redirects`
-output3=`grep 'net\.ipv4\.conf\.all\.accept_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv4\.conf\.default\.accept_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.accept_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output4=`grep '^net\.ipv4\.conf\.default\.accept_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 	echo -e "\n\tICMP 重定向已禁用。" >> ${REPORT}
 else
@@ -1371,8 +1388,8 @@ echo "" >> ${REPORT}
 echo -n "3.2.3 检查是否已禁用安全的 ICMP 重定向" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/secure_redirects`
 output2=`cat /proc/sys/net/ipv4/conf/default/secure_redirects`
-output3=`grep 'net\.ipv4\.conf\.all\.secure_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv4\.conf\.default\.secure_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.secure_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output4=`grep '^net\.ipv4\.conf\.default\.secure_redirects\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 	echo -e "\n\t安全的 ICMP 重定向已禁用。" >> ${REPORT}
 else
@@ -1384,8 +1401,8 @@ echo "" >> ${REPORT}
 echo -n "3.2.4 检查可疑数据包是否被记录" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/log_martians`
 output2=`cat /proc/sys/net/ipv4/conf/default/log_martians`
-output3=`grep 'net\.ipv4\.conf\.all\.log_martians\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv4\.conf\.default\.log_martians\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.log_martians\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output4=`grep '^net\.ipv4\.conf\.default\.log_martians\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 1 && ${output2} -eq 1 && ${output3} != "" && ${output4} != "" ]]; then
 	echo -e "\n\t记录可疑数据包已启用。" >> ${REPORT}
 else
@@ -1396,7 +1413,7 @@ echo "" >> ${REPORT}
 
 echo -n "3.2.5 检查广播 ICMP 请求是否被忽略" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts`
-output2=`grep 'net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output2=`grep '^net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 1 && ${output2} != "" ]]; then
 	echo -e "\n\t忽略广播 ICMP 请求已启用。" >> ${REPORT}
 else
@@ -1407,7 +1424,7 @@ echo "" >> ${REPORT}
 
 echo -n "3.2.6 检查虚假 ICMP 响应是否被忽略" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/icmp_ignore_bogus_error_responses`
-output2=`grep 'net\.ipv4\.icmp_ignore_bogus_error_responses\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output2=`grep '^net\.ipv4\.icmp_ignore_bogus_error_responses\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 1 && ${output2} != "" ]]; then
 	echo -e "\n\t忽略虚假 ICMP 响应已启用。" >> ${REPORT}
 else
@@ -1419,8 +1436,8 @@ echo "" >> ${REPORT}
 echo -n "3.2.7 检查反向路径过滤是否已启用" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/conf/all/rp_filter`
 output2=`cat /proc/sys/net/ipv4/conf/default/rp_filter`
-output3=`grep 'net\.ipv4\.conf\.all\.rp_filter\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-output4=`grep 'net\.ipv4\.conf\.default\.rp_filter\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output3=`grep '^net\.ipv4\.conf\.all\.rp_filter\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output4=`grep '^net\.ipv4\.conf\.default\.rp_filter\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 1 && ${output2} -eq 1 && ${output3} != "" && ${output4} != "" ]]; then
 	echo -e "\n\t反向路径过滤已启用。" >> ${REPORT}
 else
@@ -1431,7 +1448,7 @@ echo "" >> ${REPORT}
 
 echo -n "3.2.8 检查 TCP SYN Cookies 是否已启用" | tee -a ${REPORT}
 output1=`cat /proc/sys/net/ipv4/tcp_syncookies`
-output2=`grep 'net\.ipv4\.tcp_syncookies\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+output2=`grep '^net\.ipv4\.tcp_syncookies\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 if [[ ${output1} -eq 1 && ${output2} != "" ]]; then
 	echo -e "\n\tTCP SYN Cookies 已启用。" >> ${REPORT}
 else
@@ -1452,8 +1469,8 @@ echo -n "3.3.1 检查是否已拒绝 IPv6 路由广播" | tee -a ${REPORT}
 if [[ ${ipv6} -eq 0 ]]; then
 	output1=`cat /proc/sys/net/ipv6/conf/all/accept_ra`
 	output2=`cat /proc/sys/net/ipv6/conf/default/accept_ra`
-	output3=`grep 'net\.ipv6\.conf\.all\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-	output4=`grep 'net\.ipv6\.conf\.default\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output3=`grep '^net\.ipv6\.conf\.all\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output4=`grep '^net\.ipv6\.conf\.default\.accept_ra\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 	if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 		echo -e "\n\tIPv6 路由广播已禁用。" >> ${REPORT}
 	else
@@ -1469,8 +1486,8 @@ echo -n "3.3.2 检查是否已拒绝 IPv6 重定向" | tee -a ${REPORT}
 if [[ ${ipv6} -eq 0 ]]; then
 	output1=`cat /proc/sys/net/ipv6/conf/all/accept_redirects`
 	output2=`cat /proc/sys/net/ipv6/conf/default/accept_redirects`
-	output3=`grep 'net\.ipv6\.conf\.all\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
-	output4=`grep 'net\.ipv6\.conf\.default\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output3=`grep '^net\.ipv6\.conf\.all\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
+	output4=`grep '^net\.ipv6\.conf\.default\.accept_redirect\s*=\s*1' /etc/sysctl.conf /etc/sysctl.d/*`
 	if [[ ${output1} -eq 0 && ${output2} -eq 0 && ${output3} = "" && ${output4} = "" ]]; then
 		echo -e "\n\tIPv6 重定向已禁用。" >> ${REPORT}
 	else
@@ -1530,7 +1547,7 @@ echo -n "3.4.2 检查 /etc/hosts.allow 是否已配置" | tee -a ${REPORT}
 egrep -v '^\s*#|^$' /etc/hosts.allow &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t/etc/hosts.allow 配置如下：" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/hosts.allow | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/hosts.allow >> ${REPORT}
 else
 	echo -e "\n\t/etc/hosts.allow 未配置。" >> ${REPORT}
 fi
@@ -1617,10 +1634,10 @@ echo "" >> ${REPORT}
 echo "3.6 防火墙配置"
 echo -n "3.6.1 检查 iptables 是否已安装" | tee -a ${REPORT}
 rpm -q iptables-services &> /dev/null
-if [[ $? -eq 0 ]]; then
-	echo -e "\n\tiptables 已安装。" >> ${REPORT}
-else
+if [[ $? -ne 0 ]]; then
 	echo -e "\n\tiptables 未安装。" >> ${REPORT}
+else
+	echo -e "\n\tiptables 已安装。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -1640,9 +1657,9 @@ else
 fi
 iptables -L | grep policy | grep OUTPUT | grep ACCEPT &> /dev/null
 if [[ $? -ne 0 ]]; then
-	echo -e "\tFORWARD 链的默认策略为 DROP/REJECT。" >> ${REPORT}
+	echo -e "\tOUTPUT 链的默认策略为 DROP/REJECT。" >> ${REPORT}
 else
-	echo -e "\tFORWARD 链的默认策略为 ACCEPT。" >> ${REPORT}
+	echo -e "\tOUTPUT 链的默认策略为 ACCEPT。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -1673,9 +1690,9 @@ else
 fi
 iptables -L -v -n | grep ESTABLISHED &> /null
 if [[ $? -ne 0 ]]; then
-	echo -e "\n\t已建立连接的防火墙规则未配置。" >> ${REPORT}
+	echo -e "\t已建立连接的防火墙规则未配置。" >> ${REPORT}
 else
-	echo -e "\n\t已建立连接的防火墙规则配置信息如下：" >> ${REPORT}
+	echo -e "\t已建立连接的防火墙规则配置信息如下：" >> ${REPORT}
 	for chain in `iptables -L | grep Chain | awk '{print $2}'`; do
 		iptables -L ${chain} -v -n | grep ESTABLISHED &> /dev/null
 		if [[ $? -eq 0 ]]; then
@@ -1698,12 +1715,12 @@ else
 			echo -e "\n\t端口 ${port} 不存在防火墙规则。" >> /tmp/portrules
 		fi
 	done
-fi
 
-if [[ -f /tmp/portrules ]]; then
-	cat /tmp/portrules  >> ${REPORT}
-else
-	echo -e "\n\t所有开放端口都存在防火墙规则。" >> ${REPORT}
+	if [[ -f /tmp/portrules ]]; then
+		cat /tmp/portrules  >> ${REPORT}
+	else
+		echo -e "\n\t所有开放端口都存在防火墙规则。" >> ${REPORT}
+	fi
 fi
 rm -f /tmp/portrules
 echo "..........[OK]"
@@ -1798,9 +1815,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep time-change | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep time-change >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep time-change | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep time-change >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep time-change | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1815,9 +1832,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep identity | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep identity >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep identity | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep identity >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep identity | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1832,9 +1849,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep system-locale | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep system-locale >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep system-locale | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep system-locale >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep system-locale | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1848,9 +1865,9 @@ if [[ $? -ne 0 ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep MAC-policy | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep MAC-policy >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' | grep MAC-policy /etc/audit/rules.d/audit.rules | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep MAC-policy >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -1862,9 +1879,9 @@ if [[ $? -ne 0 ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep logins | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep logins >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep logins | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep logins >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -1879,9 +1896,9 @@ if [[ ${output1} = "" && ${output2} = "" && ${output3} = "" && ${output4} = "" ]
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | egrep 'session|logins' | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | egrep 'session|logins' >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | egrep 'session|logins' | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g'/etc/audit/rules.d/audit.rules | egrep 'session|logins' >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | egrep 'session|logins' | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1896,9 +1913,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep perm_mod | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep perm_mod >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep perm_mod | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep perm_mod >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep perm_mod | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1913,9 +1930,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep access | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep access >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep access | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep access >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep access | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1930,9 +1947,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep privileged | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep privileged >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep privileged | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep privileged >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep privileged | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1947,9 +1964,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep mounts | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep mounts >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep mounts | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep mounts >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep mounts | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1964,9 +1981,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep delete | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep delete >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep delete | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep delete >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep delete | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1981,9 +1998,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep scope | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep scope >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep scope | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep scope >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep scope | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -1998,9 +2015,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep actions | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep actions >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep actions | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep actions >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep actions | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2015,9 +2032,9 @@ if [[ ${output1} = "" && ${output2} = "" ]]; then
 else
 	echo -e "\n\t配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/audit/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/audit.rules | grep modules | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/audit.rules | grep modules >> ${REPORT}
 	echo -e "\n\t/etc/audit/rules.d/audit.rules:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/audit/rules.d/audit.rules | grep modules | sed 's/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/audit/rules.d/audit.rules | grep modules >> ${REPORT}
 	echo -e "\n\tauditctl:" >> ${REPORT}
 	auditctl -l | grep modules | sed 's/^/\t/g' >> ${REPORT}
 fi
@@ -2066,12 +2083,12 @@ else
 		echo -e "\n\t日志配置信息如下：" >> ${REPORT}
 		if [[ -s /etc/rsyslog.conf ]]; then
 			echo -e "\t/etc/rsyslog.conf:" >> ${REPORT}
-			egrep -v '^\s*#|^$' /etc/rsyslog.conf | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+			sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/rsyslog.conf >> ${REPORT}
 		fi
 		for file in `ls /etc/rsyslog.d`; do
 			if [[ -s /etc/rsyslog.d/${file} ]]; then
 				echo -e "\n\t/etc/rsyslog.d/${file}:" >> ${REPORT}
-				egrep -v '^\s*#|^$' /etc/rsyslog.d/${file} | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+				sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/rsyslog.d/${file} >> ${REPORT}
 			fi
 		done
 	fi
@@ -2166,7 +2183,7 @@ else
 		sysngconfid=0
 		echo -e "\n\t日志配置信息如下：" >> ${REPORT}
 		echo -e "\t/etc/syslog-ng/syslog-ng.conf:" >> ${REPORT}
-		egrep -v '^\s*#|^$' /etc/syslog-ng/syslog-ng.conf | sed '/^$/d;s/^/\t/g' >> ${REPORT}
+		sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/syslog-ng/syslog-ng.conf >> ${REPORT}
 	fi
 fi
 echo "..........[OK]"
@@ -2237,9 +2254,9 @@ else
 	echo -e "\n\trsyslog 已安装。" >> ${REPORT}
 fi
 if [[ ${syslogngid} -eq 1 ]]; then
-	echo -e "\n\tsyslog-ng 未安装。" >> ${REPORT}
+	echo -e "\tsyslog-ng 未安装。" >> ${REPORT}
 else
-	echo -e "\n\tsyslog-ng 已安装。" >> ${REPORT}
+	echo -e "\tsyslog-ng 已安装。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -2263,10 +2280,10 @@ if [[ $? -ne 0 ]]; then
 else
 	echo -e "\n\tlogrotate 配置信息如下：" >> ${REPORT}
 	echo -e "\t/etc/logrotate.conf:" >> ${REPORT}
-	egrep -v '^\s*#|^$' /etc/logrotate.conf | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+	sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/logrotate.conf >> ${REPORT}
 	for file in `ls /etc/logrotate.d`; do
 		echo -e "\n\t/etc/logrotate.d/${file}:" >> ${REPORT}
-		egrep -v '^\s*#|^$' /etc/logrotate.d/${file} | sed -e '/^$/d;s/^/\t/g' >> ${REPORT}
+		sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/logrotate.d/${file} >> ${REPORT}
 	done
 fi
 echo "..........[OK]"
@@ -2486,12 +2503,12 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "5.2.11 检查是否仅使用允许的 MAC 算法" | tee -a ${REPORT}
-grep ^MACs /etc/ssh/sshd_config &> /dev/null
+grep -i ^MACs /etc/ssh/sshd_config &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo -e "\n\tSSH 未配置允许的 MAC 算法。" >> ${REPORT}
 else
 	echo -e "\n\tSSH 允许使用的 MAC 算法配置如下：" >> ${REPORT}
-	grep ^MACs /etc/ssh/sshd_config | sed 's/^/\t/g' >> ${REPORT}
+	grep -i ^MACs /etc/ssh/sshd_config | sed 's/^/\t/g' >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -2609,7 +2626,7 @@ done
 
 if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最大密码更改间隔未配置为 365 天或更短：" >> ${REPORT}
-	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
 rm -f /tmp/users
 echo "..........[OK]"
@@ -2632,7 +2649,7 @@ done
 
 if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最小密码更改间隔未配置为 7 天或更长：" >> ${REPORT}
-	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
 rm -f /tmp/users
 echo "..........[OK]"
@@ -2655,7 +2672,7 @@ done
 
 if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码过期告警时间未配置为 7 天或更长：" >> ${REPORT}
-	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
 rm -f /tmp/users
 echo "..........[OK]"
@@ -2678,7 +2695,7 @@ done
 
 if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码失效时间未配置为 30 天或更短：" >> ${REPORT}
-	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
 rm -f /tmp/users
 echo "..........[OK]"
@@ -2698,7 +2715,7 @@ done
 
 if [[ -f /tmp/users ]]; then
 	echo -e "\n\t下列用户的最后密码修改日期不在过去：" >> ${REPORT}
-	cat /tmp/users | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 else
 	echo -e "\n\t所有用户的最后密码修改日期都在过去。" >> ${REPORT}
 fi
@@ -2737,7 +2754,7 @@ fi
 done
 
 if [[ ${output} = "" ]]; then
-	echo -e "\n\t默认umask 未配置为 027 或更高限制。" >> ${REPORT}
+	echo -e "\n\t默认 umask 未配置为 027 或更高限制。" >> ${REPORT}
 else
 	if [[ -f /tmp/files ]]; then
 		echo -e "\n\t下列文件中的 umask 未配置为 027 或更高限制：" >> ${REPORT}
@@ -2769,7 +2786,7 @@ echo "" >> ${REPORT}
 
 echo -n "5.5 检查 root 是否仅限系统控制台登录" | tee -a ${REPORT}
 echo -e "\n\t/etc/securetty 中列出的控制台信息如下，请手动检查是否存在不安全的控制台设备：" >> ${REPORT}
-cat /etc/securetty | sed -e '/^\s*#/d; s/^/\t/g' >> ${REPORT}
+sed -e '/^\s*#\|^$/d; s/^/\t/g' /etc/securetty >> ${REPORT}
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
@@ -2795,7 +2812,7 @@ echo -n "6.1.1 审计系统文件权限" | tee -a ${REPORT}
 rpm -Va --nomtime --nosize --nomd5 --nolinkto > /tmp/audit
 if [[ -s /tmp/audit ]]; then
 	echo -e "\n\t下列系统文件权限异常：" >> ${REPORT}
-	cat /tmp/audit | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/audit >> ${REPORT}
 else
 	echo -e "\n\t系统文件无异常。" >> ${REPORT}
 fi
@@ -2895,7 +2912,7 @@ echo -n "6.1.10 检查是否存在全局可写文件" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type f -perm -0002 > /tmp/wfile
 if [[ -s /tmp/wfile ]]; then
 	echo -e "\n\t存在下列全局可写文件：" >> ${REPORT}
-	cat /tmp/wfile | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/wfile >> ${REPORT}
 else
 	echo -e "\n\t不存在全局可写文件。" >> ${REPORT}
 fi
@@ -2907,7 +2924,7 @@ echo -n "6.1.11 检查是否存在无主文件或目录" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nouser > /tmp/ufile
 if [[ -s /tmp/ufile ]]; then
 	echo -e "\n\t存在下列无主文件或目录：" >> ${REPORT}
-	cat /tmp/ufile | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/ufile >> ${REPORT}
 else
 	echo -e "\n\t不存在无主文件或目录。" >> ${REPORT}
 fi
@@ -2919,7 +2936,7 @@ echo -n "6.1.12 检查是否存在未分组文件或目录" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nogroup > /tmp/gfile
 if [[ -s /tmp/ufile ]]; then
 	echo -e "\n\t存在下列未分组文件或目录：" >> ${REPORT}
-	cat /tmp/gfile | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /tmp/gfile >> ${REPORT}
 else
 	echo -e "\n\t不存在未分组文件或目录。" >> ${REPORT}
 fi
@@ -2944,7 +2961,7 @@ echo -n "6.2.1 检查密码字段是否不为空" | tee -a ${REPORT}
 output=`cat /etc/shadow | awk -F: '($2 == "" || $2 == "!!") {print $1}'`
 if [[ ${output} != "" ]]; then
 	echo -e "\n\t下列用户未设置密码：" >> ${REPORT}
-	cat /etc/shadow | awk -F: '($2 == "" || $2 == "!!") {print $1}' | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /etc/shadow | awk -F: '($2 == "" || $2 == "!!") {print $1}' >> ${REPORT}
 else
 	echo -e "\n\t所有用户均已设置密码。" >> ${REPORT}
 fi
@@ -2988,7 +3005,7 @@ echo -n "6.2.5 检查 root 是否是唯一的 UID 0 帐户" | tee -a ${REPORT}
 cat /etc/passwd | awk -F: '($3 == 0) {print $1}' | grep -v root &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\troot 非唯一的 UID 0 帐户，还存在以下 UID 0 帐户：" >> ${REPORT}
-	cat /etc/passwd | awk -F: '($3 == 0) {print $1}' | grep -v root | sed 's/^/\t/g' >> ${REPORT}
+	sed 's/^/\t/g' /etc/passwd | awk -F: '($3 == 0) {print $1}' | grep -v root >> ${REPORT}
 else
 	echo -e "\n\troot 是唯一的 UID 0 帐户。" >> ${REPORT}
 fi
