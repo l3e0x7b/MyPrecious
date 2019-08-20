@@ -48,7 +48,7 @@
 1.5.4 确保 prelink 已禁用 (评分)  
 1.6 强制访问控制  
 1.6.1 配置 SELinux  
-1.6.1.1 确保在 bootloader 配置中未禁用 Selinux (评分)  
+1.6.1.1 确保在 bootloader 配置中未禁用 SELinux (评分)  
 1.6.1.2 确保 SELinux 状态为 enforcing (评分)  
 1.6.1.3 确保 SELinux 策略已配置 (评分)  
 1.6.1.4 确保 SETroubleshoot 未安装 (评分)  
