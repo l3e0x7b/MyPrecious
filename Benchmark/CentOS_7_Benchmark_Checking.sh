@@ -13,7 +13,7 @@ if [[ $? -ne 0 ]]; then
 	exit
 fi
 
-LANG_OLD=$LANG
+LANG_OLD=${LANG}
 export LANG=en_US.UTF-8
 REPORT="/tmp/report.`date +%Y%m%d_%H%M%S`"
 
@@ -393,16 +393,16 @@ grep -r ^gpgcheck /etc/yum* > /tmp/gpgchk
 if grep -q gpgcheck=0 /tmp/gpgchk; then
 	echo -e "\n\tgpgcheck 未全局激活。未激活 gpgcheck 的 repo 信息如下：" >> ${REPORT}
 	if grep -q '/etc/yum\.conf' /tmp/gpgchk; then
-		echo -e "\n\t/etc/yum.conf" >> ${REPORT}
+		echo -e "\t/etc/yum.conf" >> ${REPORT}
 	fi
-	IFS_OLD=$IFS
-	IFS=$'\n'
 	for repofile in `grep gpgcheck=0 /tmp/gpgchk | cut -d: -f1 | uniq`; do
-		for reponame in `grep -B5 ^gpgcheck=0 ${repofile} |grep name`; do
+		IFS_OLD=$IFS
+		IFS=$'\n'
+		for reponame in `grep -B5 ^gpgcheck=0 ${repofile} | grep name`; do
 			echo -e "\t${repofile}:\t${reponame}" >> ${REPORT}
 		done
+		IFS=$IFS_OLD
 	done
-	IFS=$IFS_OLD
 else
 	echo -e "\n\tgpgcheck 已全局激活。" >> ${REPORT}
 fi
@@ -747,8 +747,7 @@ if [[ $? -ne 0 ]]; then
 	echo -e "\n\tGDM 未安装，跳过检查。" >> ${REPORT}
 else
 	if [[ -f /etc/dconf/profile/gdm ]]; then
-		cat /etc/dconf/profile/gdm > /tmp/gdm
-		if grep -q ^user-db:user /tmp/gdm && grep -q ^system-db:gdm /tmp/gdm && grep -q ^file-db:/usr/share/gdm/greeter-dconf-defaults /tmp/gdm; then
+		if grep -q ^user-db:user /etc/dconf/profile/gdm && grep -q ^system-db:gdm /etc/dconf/profile/gdm && grep -q ^file-db:/usr/share/gdm/greeter-dconf-defaults /etc/dconf/profile/gdm; then
 			echo -e "\n\t/etc/dconf/profile/gdm 文件配置正确。" >> ${REPORT}
 
 			if [[ -d /etc/dconf/db/gdm.d ]]; then
@@ -769,7 +768,6 @@ else
 		echo -e "\n\t/etc/dconf/profile/gdm 文件不存在，跳过检查。" >> ${REPORT}
 	fi
 fi
-rm -f /tmp/gdm
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
@@ -1716,13 +1714,13 @@ else
 		fi
 	done
 
-	if [[ -f /tmp/portrules ]]; then
+	if [[ -s /tmp/portrules ]]; then
 		cat /tmp/portrules  >> ${REPORT}
 	else
 		echo -e "\n\t所有开放端口都存在防火墙规则。" >> ${REPORT}
 	fi
+	rm -f /tmp/portrules
 fi
-rm -f /tmp/portrules
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
@@ -2375,9 +2373,7 @@ if [[ -f /etc/cron.deny ]]; then
 	echo -e "\n\t检测到文件 /etc/cron.deny。" >> ${REPORT}
 fi
 
-if [[ ! -f /etc/at.allow ]]; then
-	echo -e "\n\tcron 未配置为仅限授权用户使用 (/etc/at.allow 文件不存在)。" >> ${REPORT}
-else
+if [[ -f /etc/at.allow ]]; then
 	perm=`stat -c %a/%A/%u/%U/%g/%G /etc/at.allow`
 	if [[ ${perm} != "600/-rw-------/0/root/0/root" ]]; then
 		echo -e "\n\tat 未配置为仅限授权用户使用，当前权限如下：" >> ${REPORT}
@@ -2385,10 +2381,10 @@ else
 	else
 		echo -e "\n\tat 已配置为仅限授权用户使用。" >> ${REPORT}
 	fi
-fi
-if [[ ! -f /etc/cron.allow ]]; then
-	echo -e "\n\tcron 未配置为仅限授权用户使用 (/etc/cron.allow 文件不存在)。" >> ${REPORT}
 else
+	echo -e "\n\tcron 未配置为仅限授权用户使用 (/etc/at.allow 文件不存在)。" >> ${REPORT}
+fi
+if [[ -f /etc/cron.allow ]]; then
 	perm=`stat -c %a/%A/%u/%U/%g/%G /etc/cron.allow`
 	if [[ ${perm} != "600/-rw-------/0/root/0/root" ]]; then
 		echo -e "\n\tcron 未配置为仅限授权用户使用，当前权限如下：" >> ${REPORT}
@@ -2396,6 +2392,8 @@ else
 	else
 		echo -e "\n\tcron 已配置为仅限授权用户使用。" >> ${REPORT}
 	fi
+else
+	echo -e "\n\tcron 未配置为仅限授权用户使用 (/etc/cron.allow 文件不存在)。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -2624,7 +2622,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -f /tmp/users ]]; then
+if [[ -s /tmp/users ]]; then
 	echo -e "\n\t下列用户的最大密码更改间隔未配置为 365 天或更短：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
@@ -2647,7 +2645,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -f /tmp/users ]]; then
+if [[ -s /tmp/users ]]; then
 	echo -e "\n\t下列用户的最小密码更改间隔未配置为 7 天或更长：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
@@ -2670,7 +2668,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -f /tmp/users ]]; then
+if [[ -s /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码过期告警时间未配置为 7 天或更长：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
@@ -2693,7 +2691,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -f /tmp/users ]]; then
+if [[ -s /tmp/users ]]; then
 	echo -e "\n\t下列用户的密码失效时间未配置为 30 天或更短：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 fi
@@ -2713,7 +2711,7 @@ for user in ${users}; do
 	fi
 done
 
-if [[ -f /tmp/users ]]; then
+if [[ -s /tmp/users ]]; then
 	echo -e "\n\t下列用户的最后密码修改日期不在过去：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/users >> ${REPORT}
 else
@@ -2754,9 +2752,9 @@ fi
 done
 
 if [[ ${output} = "" ]]; then
-	echo -e "\n\t默认 umask 未配置为 027 或更高限制。" >> ${REPORT}
+	echo -e "\n\t默认 umask 未配置。" >> ${REPORT}
 else
-	if [[ -f /tmp/files ]]; then
+	if [[ -s /tmp/files ]]; then
 		echo -e "\n\t下列文件中的 umask 未配置为 027 或更高限制：" >> ${REPORT}
 		cat /tmp/files | uniq >> ${REPORT}
 	else
@@ -2934,7 +2932,7 @@ echo "" >> ${REPORT}
 
 echo -n "6.1.12 检查是否存在未分组文件或目录" | tee -a ${REPORT}
 df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nogroup > /tmp/gfile
-if [[ -s /tmp/ufile ]]; then
+if [[ -s /tmp/gfile ]]; then
 	echo -e "\n\t存在下列未分组文件或目录：" >> ${REPORT}
 	sed 's/^/\t/g' /tmp/gfile >> ${REPORT}
 else
@@ -3053,7 +3051,7 @@ echo -e "\t${user}" >> /tmp/output
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户不存在家目录：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3082,7 +3080,7 @@ fi
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户家目录的权限存在异常：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3102,7 +3100,7 @@ fi
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户家目录的权限存在异常：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3129,7 +3127,7 @@ done
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户的 dotfiles 权限存在异常：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3148,7 +3146,7 @@ fi
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .forward 文件：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3167,7 +3165,7 @@ fi
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .netrc 文件：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3206,7 +3204,7 @@ done
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户的 .netrc 文件权限存在异常：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3227,7 +3225,7 @@ done
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t下列用户有 .rhosts 文件：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3245,7 +3243,7 @@ for group in `cut -s -d: -f4 /etc/passwd | sort -u`; do
 	fi
 done
 
-if [[ -f /tmp/group ]]; then
+if [[ -s /tmp/group ]]; then
 	echo -e "\n\t/etc/group 中不存在下列组：" >> ${REPORT}
 	cat /tmp/group >> ${REPORT}
 else
@@ -3265,7 +3263,7 @@ echo -e "\t重复的 UID：$2 (${users})。" >> /tmp/output
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t存在重复的 UID 如下：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3285,7 +3283,7 @@ echo -e "\t重复的 GID：$2 (${groups})。" >> /tmp/output
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t存在重复的 GID 如下：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3305,7 +3303,7 @@ echo -e "\t重复的用户名：$2 (${uids})。" >> /tmp/output
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t存在重复的用户名如下：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3325,7 +3323,7 @@ echo "重复的组名：$2 (${gids})。" >> /tmp/output
 fi
 done
 
-if [[ -f /tmp/output ]]; then
+if [[ -s /tmp/output ]]; then
 	echo -e "\n\t存在重复的组名如下：" >> ${REPORT}
 	cat /tmp/output >> ${REPORT}
 else
@@ -3338,4 +3336,4 @@ echo "--------------------------------------------------"
 echo "执行结束，检测结果已保存至 ${REPORT}。"
 echo
 
-export LANG=$LANG_OLD
+export LANG=${LANG_OLD}
