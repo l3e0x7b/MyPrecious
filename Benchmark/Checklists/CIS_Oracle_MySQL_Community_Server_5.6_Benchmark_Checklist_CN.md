@@ -64,10 +64,10 @@
 7.8 确保不存在匿名帐户 (评分)  
 8 网络  
 8.1 确保 'have_ssl' 已设置为 'YES' (评分)  
-8.2 确保所有远程用户的 'ssl_type' 已设置为 'ANY', 'X509', 或 'SPECIFIED' (评分)  
+8.2 确保所有远程用户的 'ssl_type' 已设置为 'ANY', 'X509', 或其他指定的加密方法 (评分)  
 9 主从复制  
 9.1 确保主从复制流量已得到保护 (无评分)  
 9.2 确保 'master_info_repository' 已设置为 'TABLE' (评分)  
-9.3 确保 'MASTER_SSL_确认_SERVER_CERT' 已设置为 'YES' 或 '1' (评分)  
+9.3 确保 'MASTER_SSL_VERIFY_SERVER_CERT' 已设置为 'YES' 或 '1' (评分)  
 9.4 确保主从复制用户的 'super_priv' 未设置为 'Y' (评分)  
 9.5 确保没有主从复制用户使用通配符主机名 (评分)  
