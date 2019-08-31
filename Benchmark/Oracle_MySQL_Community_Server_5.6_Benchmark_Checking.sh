@@ -769,11 +769,60 @@ echo "" >> ${REPORT}
 
 echo "8 网络" | tee -a ${REPORT}
 echo -n "8.1 检查 have_ssl 是否已设置为 YES" | tee -a ${REPORT}
-echo -n "8.2 检查是否所有远程用户的 ssl_type 已设置为 ANY, X509, 或 SPECIFIED" | tee -a ${REPORT}
+have_ssl=`${MY_EXEC} -e "show variables like 'have_ssl';" | awk '{if (NR!=1) print $2}'`
+if [[ ${have_ssl} = "DISABLED" ]]; then
+	ssl_id=1
+	echo -e "\n\thave_ssl 值未设置为 YES。" >> ${REPORT}
+else
+	ssl_id=0
+	echo -e "\n\thave_ssl 值已设置为 YES。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "8.2 检查是否所有远程用户的 ssl_type 已设置为 ANY, X509, 或其他指定的加密方法" | tee -a ${REPORT}
+ssl_type=`${MY_EXEC} -e "select user, host from mysql.user where host not in ('::1', '127.0.0.1', 'localhost') and ssl_type = '';`
+if [[ ${ssl_type} = "" ]]; then
+	echo -e "\n\t所有远程用户的 ssl_type 已设置为 ANY, X509, 或其他指定的加密方法。" >> ${REPORT}
+else
+	echo -e "\n\t下列远程用户的 ssl_type 未设置为 ANY, X509, 或其他指定的加密方法：" >> ${REPORT}
+	printf "%-10s %-10s\n" ${ssl_type} | sed 's/^/\t/g' >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
 echo "9 主从复制" | tee -a ${REPORT}
 echo -n "9.1 检查主从复制流量是否已得到保护" | tee -a ${REPORT}
+if [[ ${ssl_id} -eq 0 ]]; then
+	echo -e "\n\t MySQL 的 SSL 功能已启用。" >> ${REPORT}
+	echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+else
+	echo -e "\n\t MySQL 的 SSL 功能未启用。" >> ${REPORT}
+	echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
 echo -n "9.2 检查 master_info_repository 是否已设置为 TABLE" | tee -a ${REPORT}
-echo -n "9.3 检查 MASTER_SSL_检查_SERVER_CERT 是否已设置为 YES 或 1" | tee -a ${REPORT}
+master_info_repo=`${MY_EXEC} -e "show variables like 'master_info_repository';" | awk '{if (NR!=1) print $2}'`
+if [[ ${master_info_repo} != "TABLE" ]]; then
+	echo -e "\n\tmaster_info_repository 未设置为 TABLE。" >> ${REPORT}
+else
+	echo -e "\n\tmaster_info_repository 已设置为 TABLE。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "9.3 检查 MASTER_SSL_VERIFY_SERVER_CERT 是否已设置为 YES 或 1" | tee -a ${REPORT}
+ssl_ver_ser_cert=`${MY_EXEC} -e "select ssl_verify_server_cert from mysql.slave_master_info;"`
+if [[ ${ssl_ver_ser_cert} =~ YES|1 ]]; then
+	echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 已设置为 YES 或 1。" >> ${REPORT}
+else
+	echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 未设置为 YES 或 1。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
 echo -n "9.4 检查主从复制用户的 super_priv 是否未设置为 Y" | tee -a ${REPORT}
 echo -n "9.5 检查是否没有主从复制用户使用通配符主机名" | tee -a ${REPORT}
 
