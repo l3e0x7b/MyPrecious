@@ -7,6 +7,9 @@
 
 clear
 
+export LANG=en_US.UTF-8
+REPORT="/tmp/report.`date +%Y%m%d_%H%M%S`"
+
 /usr/bin/id | grep uid=0 &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo "当前非 root 登录，请切换至 root 后再执行此脚本！"
@@ -38,12 +41,16 @@ ${MY_EXEC} -e "quit" &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo
 	echo "无法连接到 MySQL 数据库，请检查 MySQL 服务是否已启动及用户名或密码是否输入正确！"
+	rm -f ~/.my.cnf
 	exit
 fi
 
-LANG_OLD=${LANG}
-export LANG=en_US.UTF-8
-REPORT="/tmp/report.`date +%Y%m%d_%H%M%S`"
+DB_MYSQL=`${MY_EXEC} -e "show databases like 'mysql';"`
+if [[ ${DB_MYSQL} = "" ]]; then
+	DB_MYSQL=1
+else
+	DB_MYSQL=0
+fi
 
 echo
 echo "主机信息" | tee -a ${REPORT}
@@ -389,11 +396,11 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --allow-suspicious-udfs 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep allow-suspicious-udfs=ON &> /dev/null
+my_print_defaults mysqld | grep allow-suspicious-udfs=FALSE &> /dev/null
 if [[ $? -eq 0 ]]; then
-	echo -e "\n\tallow-suspicious-udfs 选项未设置为 FALSE。" >> ${REPORT}
-else
 	echo -e "\n\tallow-suspicious-udfs 选项已设置为 FALSE。" >> ${REPORT}
+else
+	echo -e "\n\tallow-suspicious-udfs 选项未设置为 FALSE。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -416,11 +423,11 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --skip-grant-tables 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep skip-grant-tables=ON &> /dev/null
+my_print_defaults mysqld | grep skip-grant-tables=FALSE &> /dev/null
 if [[ $? -eq 0 ]]; then
-	echo -e "\n\tskip-grant-tables 选项未设置为 FALSE。" >> ${REPORT}
-else
 	echo -e "\n\tskip-grant-tables 选项已设置为 FALSE。" >> ${REPORT}
+else
+	echo -e "\n\tskip-grant-tables 选项未设置为 FALSE。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -438,7 +445,7 @@ echo "" >> ${REPORT}
 echo -n "4.7 检查 daemon_memcached 插件是否已禁用" | tee -a ${REPORT}
 dae_mem=`${MY_EXEC} -e "select plugin_status from information_schema.plugins where plugin_name='daemon_memcached';" | awk '{if (NR!=1) print}'`
 if [[ ${dae_mem} = "ACTIVE" ]]; then
- 	echo -e "\n\tdaemon_memcached 插件未禁用。" >> ${REPORT}
+	echo -e "\n\tdaemon_memcached 插件未禁用。" >> ${REPORT}
 else
 	echo -e "\n\tdaemon_memcached 插件已禁用。" >> ${REPORT}
 fi 
@@ -467,78 +474,145 @@ echo "" >> ${REPORT}
 
 echo "5 MySQL 权限" | tee -a ${REPORT}
 echo -n "5.1 检查是否仅管理员用户有 mysql 库的完全访问权限" | tee -a ${REPORT}
-global_priv=`${MY_EXEC} -e "select user, host, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv from mysql.user;"`
-db_priv=`${MY_EXEC} -e "select user, host, db, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv from mysql.db where db = 'mysql';"`
-echo -e "\n\t所有用户的全局权限信息如下：" >> ${REPORT}
-printf "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	global_priv=`${MY_EXEC} -e "select user, host, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv from mysql.user;"`
+	db_priv=`${MY_EXEC} -e "select user, host, db, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv from mysql.db where db = 'mysql';"`
+	echo -e "\n\t所有用户的全局权限信息如下：" >> ${REPORT}
+	printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
 
-if [[ ${db_priv} = "" ]]; then
-	echo -e "\n\t可访问 mysql 库的用户权限信息如下：" >> ${REPORT}
-	printf "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
+	if [[ ${db_priv} = "" ]]; then
+		echo -e "\n\t可访问 mysql 库的用户权限信息如下：" >> ${REPORT}
+		printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
+	else
+		echo -e "\n\t可访问 mysql 库的用户权限信息如下：" >> ${REPORT}
+		printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
 else
-	echo -e "\n\t可访问 mysql 库的用户权限信息如下：" >> ${REPORT}
-	printf "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
+
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "5.2 检查非管理员用户的 file_priv 是否未设置为 Y" | tee -a ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	file_priv=`${MY_EXEC} -e "select user, host from mysql.user where file_priv = 'Y';"`
+	if [[ ${file_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 file_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\tfile_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${file_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "5.2 检查 非管理员用户的 file_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\tfile_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where file_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+echo -n "5.3 检查非管理员用户的 process_priv 是否未设置为 Y" | tee -a ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	proc_priv=`${MY_EXEC} -e "select user, host from mysql.user where process_priv = 'Y';"`
+	if [[ ${proc_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 process_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\tprocess_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${file_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "5.3 检查 非管理员用户的 process_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\tprocess_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where process_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+echo -n "5.4 检查非管理员用户的 super_priv 是否未设置为 Y" | tee -a ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	super_priv=`${MY_EXEC} -e "select user, host from mysql.user where super_priv = 'Y';"`
+	if [[ ${super_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 super_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\tsuper_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${super_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "5.4 检查 非管理员用户的 super_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\tsuper_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where super_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+echo -n "5.5 检查非管理员用户的 shutdown_priv 是否未设置为 Y" | tee -a ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	shutdown_priv=`${MY_EXEC} -e "select user, host from mysql.user where shutdown_priv = 'Y';"`
+	if [[ ${shutdown_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 shutdown_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\tshutdown_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${shutdown_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi	
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
-echo -n "5.5 检查 非管理员用户的 shutdown_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\tshutdown_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where shutdown_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
-echo "..........[OK]"
-echo "" >> ${REPORT}
-
-echo -n "5.6 检查 非管理员用户的 create_user_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\tcreate_user_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where create_user_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+echo -n "5.6 检查非管理员用户的 create_user_priv 是否未设置为 Y" | tee -a ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	create_user_priv=`${MY_EXEC} -e "select user, host from mysql.user where create_user_priv = 'Y';"`
+	if [[ ${create_user_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 create_user_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\tcreate_user_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${create_user_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "5.7 检查 非管理员用户的 grant_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\t全局 grant_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where grant_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	echo -e "\n\t全局 grant_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+	${MY_EXEC} -e "select user, host from mysql.user where grant_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
 
-grant_priv=`${MY_EXEC} -e "select user, host, db from mysql.db where grant_priv = 'Y';"`
-if [[ ${grant_priv} != "" ]]; then
-	echo -e "\n\t针对指定数据库的 grant_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-	printf "%-10s %-10s %-10s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	grant_priv=`${MY_EXEC} -e "select user, host, db from mysql.db where grant_priv = 'Y';"`
+	if [[ ${grant_priv} != "" ]]; then
+		echo -e "\n\t针对指定数据库的 grant_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s %-10s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "5.8 检查 Non-Slave 用户的 repl_slave_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -e "\n\trepl_slave_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
-${MY_EXEC} -e "select user, host from mysql.user where repl_slave_priv = 'Y';" | sed 's/^/\t/g' >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	repl_slave_priv=`${MY_EXEC} -e "select user, host from mysql.user where repl_slave_priv = 'Y';"`
+	if [[ ${repl_slave_priv} = "" ]]; then
+		echo -e "\n\t所有用户的 repl_slave_priv 均未设置为 Y。" >> ${REPORT}
+	else
+		echo -e "\n\trepl_slave_priv 设置为 Y 的用户信息如下：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${repl_slave_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "5.9 检查 DML/DDL 授权是否仅限于特定数据库和用户" | tee -a ${REPORT}
-global_priv=`${MY_EXEC} -e "select user, host, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv, alter_priv from mysql.user;"`
-db_priv=`${MY_EXEC} -e "select user, host, db, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv, alter_priv from mysql.db;"`
-echo -e "\n\t所有用户的全局 DML/DDL 权限信息如下：" >> ${REPORT}
-printf "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	global_priv=`${MY_EXEC} -e "select user, host, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv, alter_priv from mysql.user;"`
+	db_priv=`${MY_EXEC} -e "select user, host, db, select_priv, insert_priv, update_priv, delete_priv, create_priv, drop_priv, alter_priv from mysql.db;"`
+	echo -e "\n\t所有用户的全局 DML/DDL 权限信息如下：" >> ${REPORT}
+	printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${global_priv} | sed 's/^/\t/g' >> ${REPORT}
 
-if [[ ${db_priv} != "" ]]; then
-	echo -e "\n\t用户针对指定数据库的 DML/DDL 权限信息如下：" >> ${REPORT}
-	printf "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	if [[ ${db_priv} != "" ]]; then
+		echo -e "\n\t用户针对指定数据库的 DML/DDL 权限信息如下：" >> ${REPORT}
+		printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
+	fi
+else
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -641,11 +715,11 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --log-raw 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep log-raw=ON &> /dev/null
+my_print_defaults mysqld | grep log-raw=OFF &> /dev/null
 if [[ $? -eq 0 ]]; then
-	echo -e "\n\tlog-raw 选项未设置为 OFF。" >> ${REPORT}
-else
 	echo -e "\n\tlog-raw 选项已设置为 OFF。" >> ${REPORT}
+else
+	echo -e "\n\tlog-raw 选项未设置为 OFF。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -674,9 +748,9 @@ echo "" >> ${REPORT}
 echo -n "7.3 检查密码是否没有存储在全局配置中" | tee -a ${REPORT}
 my_print_defaults client | grep password &> /dev/null
 if [[ $? -eq 0 ]]; then
-	echo -e "\n\t密码是否存储在全局配置中。" >> ${REPORT}
+	echo -e "\n\t密码存储在全局配置中。" >> ${REPORT}
 else
-	echo -e "\n\t密码是否没有存储在全局配置中。" >> ${REPORT}
+	echo -e "\n\t密码没有存储在全局配置中。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -692,12 +766,16 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "7.5 检查是否已为所有 MySQL 帐户设置密码" | tee -a ${REPORT}
-output=`${MY_EXEC} -e "select user, host from mysql.user where (plugin in('mysql_native_password', 'mysql_old_password', '') and (length(password)=0 or password is null)) or (plugin='sha256_password' and length(authentication_string)=0);"`
-if [[ ${output} = "" ]]; then
-	echo -e "\n\t已为所有 MySQL 帐户设置密码。" >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	output=`${MY_EXEC} -e "select user, host from mysql.user where (plugin in('mysql_native_password', 'mysql_old_password', '') and (length(password)=0 or password is null)) or (plugin='sha256_password' and length(authentication_string)=0);"`
+	if [[ ${output} = "" ]]; then
+		echo -e "\n\t已为所有 MySQL 帐户设置密码。" >> ${REPORT}
+	else
+		echo -e "\n\t下列 MySQL 帐户未设置密码：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${output} | sed 's/^/\t/g' >> ${REPORT}
+	fi
 else
-	echo -e "\n\t下列 MySQL 帐户未设置密码：" >> ${REPORT}
-	printf "%-10s %-10s\n" ${output} | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -746,23 +824,31 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "7.7 检查是否没有用户使用通配符主机名" | tee -a ${REPORT}
-wildcard_host=`${MY_EXEC} -e "select user, host from mysql.user where host = '%';"`
-if [[ ${wildcard_host} = "" ]]; then
-	echo -e "\n\t没有用户使用通配符主机名。" >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	wildcard_host=`${MY_EXEC} -e "select user, host from mysql.user where host = '%';"`
+	if [[ ${wildcard_host} = "" ]]; then
+		echo -e "\n\t没有用户使用通配符主机名。" >> ${REPORT}
+	else
+		echo -e "\n\t下列用户使用了通配符主机名：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${wildcard_host} | sed 's/^/\t/g' >> ${REPORT}
+	fi
 else
-	echo -e "\n\t下列用户使用了通配符主机名：" >> ${REPORT}
-	printf "%-10s %-10s\n" ${wildcard_host} | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "7.8 检查是否不存在匿名帐户" | tee -a ${REPORT}
-anonymous=`${MY_EXEC} -e "select user, host from mysql.user where user = '';"`
-if [[ ${anonymous} = "" ]]; then
-	echo -e "\n\t不存在匿名帐户。" >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	anonymous=`${MY_EXEC} -e "select user, host from mysql.user where user = '';"`
+	if [[ ${anonymous} = "" ]]; then
+		echo -e "\n\t不存在匿名帐户。" >> ${REPORT}
+	else
+		echo -e "\n\t存在下列匿名帐户：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${anonymous} | sed 's/^/\t/g' >> ${REPORT}
+	fi
 else
-	echo -e "\n\t存在下列匿名帐户：" >> ${REPORT}
-	printf "%-10s %-10s\n" ${anonymous} | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -781,54 +867,122 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "8.2 检查是否所有远程用户的 ssl_type 已设置为 ANY, X509, 或其他指定的加密方法" | tee -a ${REPORT}
-ssl_type=`${MY_EXEC} -e "select user, host from mysql.user where host not in ('::1', '127.0.0.1', 'localhost') and ssl_type = '';`
-if [[ ${ssl_type} = "" ]]; then
-	echo -e "\n\t所有远程用户的 ssl_type 已设置为 ANY, X509, 或其他指定的加密方法。" >> ${REPORT}
+if [[ ${DB_MYSQL} -eq 0 ]]; then
+	ssl_type=`${MY_EXEC} -e "select user, host from mysql.user where host not in ('::1', '127.0.0.1', 'localhost') and ssl_type = '';"`
+	if [[ ${ssl_type} = "" ]]; then
+		echo -e "\n\t所有远程用户的 ssl_type 已设置为 ANY, X509, 或其他指定的加密方法。" >> ${REPORT}
+	else
+		echo -e "\n\t下列远程用户的 ssl_type 未设置为 ANY, X509, 或其他指定的加密方法：" >> ${REPORT}
+		printf "%-10s %-10s\n" ${ssl_type} | sed 's/^/\t/g' >> ${REPORT}
+	fi
 else
-	echo -e "\n\t下列远程用户的 ssl_type 未设置为 ANY, X509, 或其他指定的加密方法：" >> ${REPORT}
-	printf "%-10s %-10s\n" ${ssl_type} | sed 's/^/\t/g' >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo "9 主从复制" | tee -a ${REPORT}
-echo -n "9.1 检查主从复制流量是否已得到保护" | tee -a ${REPORT}
-if [[ ${ssl_id} -eq 0 ]]; then
-	echo -e "\n\t MySQL 的 SSL 功能已启用。" >> ${REPORT}
-	echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+master=`${MY_EXEC} -e "show master status;"`
+slave=`${MY_EXEC} -e "show slave status;"`
+slave_io=`${MY_EXEC} -e "show slave status\G" | grep Slave_IO_Running | cut -d: -f 2 | xargs`
+if [[ ${master} = "" && (${slave} = "" || ${slave_io} != "Yes") ]]; then
+	rpel_stat=1
 else
-	echo -e "\n\t MySQL 的 SSL 功能未启用。" >> ${REPORT}
-	echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+	rpel_stat=0
+fi
+
+echo -n "9.1 检查主从复制流量是否已得到保护" | tee -a ${REPORT}
+if [[ ${rpel_stat} -eq 0 ]]; then
+	if [[ ${ssl_id} -eq 0 ]]; then
+		echo -e "\n\t MySQL 的 SSL 功能已启用。" >> ${REPORT}
+		echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+	else
+		echo -e "\n\t MySQL 的 SSL 功能未启用。" >> ${REPORT}
+		echo -e "\n\t请手动检查是否还使用了私有网络、VPN、SSL/TLS 或 SSH 通道等保护主从复制流量。" >> ${REPORT}
+	fi
+else
+	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "9.2 检查 master_info_repository 是否已设置为 TABLE" | tee -a ${REPORT}
-master_info_repo=`${MY_EXEC} -e "show variables like 'master_info_repository';" | awk '{if (NR!=1) print $2}'`
-if [[ ${master_info_repo} != "TABLE" ]]; then
-	echo -e "\n\tmaster_info_repository 未设置为 TABLE。" >> ${REPORT}
+if [[ ${rpel_stat} -eq 0 ]]; then
+	master_info_repo=`${MY_EXEC} -e "show variables like 'master_info_repository';" | awk '{if (NR!=1) print $2}'`
+	if [[ ${master_info_repo} != "TABLE" ]]; then
+		echo -e "\n\tmaster_info_repository 未设置为 TABLE。" >> ${REPORT}
+	else
+		echo -e "\n\tmaster_info_repository 已设置为 TABLE。" >> ${REPORT}
+	fi
 else
-	echo -e "\n\tmaster_info_repository 已设置为 TABLE。" >> ${REPORT}
+	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "9.3 检查 MASTER_SSL_VERIFY_SERVER_CERT 是否已设置为 YES 或 1" | tee -a ${REPORT}
-ssl_ver_ser_cert=`${MY_EXEC} -e "select ssl_verify_server_cert from mysql.slave_master_info;"`
-if [[ ${ssl_ver_ser_cert} =~ YES|1 ]]; then
-	echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 已设置为 YES 或 1。" >> ${REPORT}
+if [[ ${rpel_stat} -eq 0 ]]; then
+	if [[ ${DB_MYSQL} -eq 0 ]]; then
+		ssl_ver_ser_cert=`${MY_EXEC} -e "select ssl_verify_server_cert from mysql.slave_master_info;"`
+		if [[ ${ssl_ver_ser_cert} =~ YES|1 ]]; then
+			echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 已设置为 YES 或 1。" >> ${REPORT}
+		else
+			echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 未设置为 YES 或 1。" >> ${REPORT}
+		fi
+	else
+		echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	fi
 else
-	echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 未设置为 YES 或 1。" >> ${REPORT}
+	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "9.4 检查主从复制用户的 super_priv 是否未设置为 Y" | tee -a ${REPORT}
-echo -n "9.5 检查是否没有主从复制用户使用通配符主机名" | tee -a ${REPORT}
+if [[ ${rpel_stat} -eq 0 ]]; then
+	for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
+		${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
+		if [[ $? -eq 0 ]]; then
+			${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and super_priv = 'Y';" >> /tmp/super_priv
+		fi
+	done
 
+	if [[ -s /tmp/super_priv ]]; then
+		echo -e "\n\t下列主从复制用户的 super_priv 设置了 Y：" >> ${REPORT}
+		sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/super_priv >> ${REPORT}
+	else
+		echo -e "\n\t主从复制用户的 super_priv 未设置 Y。" >> ${REPORT}
+	fi
+	rm -f /tmp/super_priv
+else
+	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
+
+echo -n "9.5 检查是否没有主从复制用户使用通配符主机名" | tee -a ${REPORT}
+if [[ ${rpel_stat} -eq 0 ]]; then
+	for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
+		${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
+		if [[ $? -eq 0 ]]; then
+			${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and host = '%';" >> /tmp/rpel_user
+		fi
+	done
+
+	if [[ -s /tmp/rpel_user ]]; then
+		echo -e "\n\t下列主从复制用户使用了通配符主机名：" >> ${REPORT}
+		sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/rpel_user >> ${REPORT}
+	else
+		echo -e "\n\t没有主从复制用户使用通配符主机名。" >> ${REPORT}
+	fi
+	rm -f /tmp/rpel_user
+else
+	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
+fi
+echo "..........[OK]"
+echo "" >> ${REPORT}
 echo "--------------------------------------------------"
 echo "执行结束，检测结果已保存至 ${REPORT}。"
 echo
 
 rm -f ~/.my.cnf
-export LANG=${LANG_OLD}
