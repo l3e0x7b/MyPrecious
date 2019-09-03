@@ -7,15 +7,14 @@
 
 clear
 
+export LANG=en_US.UTF-8
+REPORT="/tmp/report.`date +%Y%m%d_%H%M%S`"
+
 /usr/bin/id | grep uid=0 &> /dev/null
 if [[ $? -ne 0 ]]; then
 	echo "当前非 root 登录，请切换至 root 后再执行此脚本！"
 	exit
 fi
-
-LANG_OLD=${LANG}
-export LANG=en_US.UTF-8
-REPORT="/tmp/report.`date +%Y%m%d_%H%M%S`"
 
 echo "主机信息" | tee -a ${REPORT}
 echo "--------------------------------------------------" | tee -a ${REPORT}
@@ -1715,7 +1714,7 @@ else
 	done
 
 	if [[ -s /tmp/portrules ]]; then
-		cat /tmp/portrules  >> ${REPORT}
+		cat /tmp/portrules >> ${REPORT}
 	else
 		echo -e "\n\t所有开放端口都存在防火墙规则。" >> ${REPORT}
 	fi
@@ -3335,5 +3334,3 @@ echo "" >> ${REPORT}
 echo "--------------------------------------------------"
 echo "执行结束，检测结果已保存至 ${REPORT}。"
 echo
-
-export LANG=${LANG_OLD}
