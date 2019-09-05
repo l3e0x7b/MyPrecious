@@ -27,8 +27,8 @@ echo
 if [[ -f /usr/bin/mysql ]]; then
 	MY_EXEC=/usr/bin/mysql
 else
-	echo -n "请输入 mysql 命令路径：（例如 /usr/bin/mysql）"
-	read MY_EXEC
+	echo -n "请输入 MySQL 命令路径：（例如 /usr/bin/mysql）"
+	read -e MY_EXEC
 fi
 
 cat <<-EOF > ~/.my.cnf
@@ -51,6 +51,9 @@ if [[ ${DB_MYSQL} = "" ]]; then
 else
 	DB_MYSQL=0
 fi
+
+BASE=`${MY_EXEC} -e "show variables like 'basedir';" | awk '{if (NR!=1) print $2}'`
+BASE=${BASE}/bin
 
 echo
 echo "主机信息" | tee -a ${REPORT}
@@ -228,27 +231,34 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "3.2 检查二进制日志文件是否有适当的权限" | tee -a ${REPORT}
-binlog_base=`${MY_EXEC} -e "show variables like 'log_bin_basename';" | awk '{if (NR!=1) print $2}'`
-if [[ ${binlog_base} = "" ]]; then
+binlog_stat=`${MY_EXEC} -e "show variables like 'log_bin';" | awk '{if (NR!=1) print $2}'`
+if [[ ${binlog_stat} = OFF ]]; then
 	binlogid=1
 	echo -e "\n\t二进制日志未启用，跳过检查。" >> ${REPORT}
 else
 	binlogid=0
-	for binlog in ${binlog_base}.*; do
-		perm=`stat -c %a/%U/%G ${binlog}`
-		if [[ ${perm} != "660/mysql/mysql" ]]; then
-			echo ${binlog} >> /tmp/binlog
-		fi
-	done
-fi
+	binlog_base=`${MY_EXEC} -e "show variables like 'log_bin_basename';" | awk '{if (NR!=1) print $2}'`
+	if [[ ${binlog_base} = "" ]]; then
+		binlog_baseid=1
+		echo -e "\n\t未配置二进制日志文件基本名，跳过检查。" >> ${REPORT}
+	else
+		binlog_baseid=0
+		for binlog in ${binlog_base}.*; do
+			perm=`stat -c %a/%U/%G ${binlog}`
+			if [[ ${perm} != "660/mysql/mysql" ]]; then
+				echo ${binlog} >> /tmp/binlog
+			fi
+		done
 
-if [[ -s /tmp/binlog ]]; then
-		echo -e "\n\t下列二进制日志文件的权限未按建议配置：" >> ${REPORT}
-		sed 's/^/\t/g' /tmp/binlog >> ${REPORT}
-else
-		echo -e "\n\t二进制日志文件有适当的权限。" >> ${REPORT}
+		if [[ -s /tmp/binlog ]]; then
+			echo -e "\n\t下列二进制日志文件的权限未按建议配置：" >> ${REPORT}
+			sed 's/^/\t/g' /tmp/binlog >> ${REPORT}
+		else
+			echo -e "\n\t二进制日志文件有适当的权限。" >> ${REPORT}
+		fi
+		rm -f /tmp/binlog
+	fi
 fi
-rm -f /tmp/binlog
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
@@ -293,7 +303,7 @@ echo -n "3.5 检查中继日志文件是否有适当的权限" | tee -a ${REPORT
 relaylog_base=`${MY_EXEC} -e "show variables like 'relay_log_basename';" | awk '{if (NR!=1) print $2}'`
 if [[ ${relaylog_base} = "" ]]; then
 	relaylogid=1
-	echo -e "\n\t未配置中继日志，跳过检查。" >> ${REPORT}
+	echo -e "\n\t未配置中继日志文件基本名，跳过检查。" >> ${REPORT}
 else
 	relaylogid=0
 	count=`ls ${relaylog_base}.* 2> /dev/null | wc -l`
@@ -396,7 +406,7 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --allow-suspicious-udfs 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep allow-suspicious-udfs=FALSE &> /dev/null
+${BASE}/my_print_defaults mysqld | grep allow-suspicious-udfs=FALSE &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\tallow-suspicious-udfs 选项已设置为 FALSE。" >> ${REPORT}
 else
@@ -423,7 +433,7 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --skip-grant-tables 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep skip-grant-tables=FALSE &> /dev/null
+${BASE}/my_print_defaults mysqld | grep skip-grant-tables=FALSE &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\tskip-grant-tables 选项已设置为 FALSE。" >> ${REPORT}
 else
@@ -488,7 +498,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 
 echo "..........[OK]"
@@ -504,7 +514,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${file_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -519,7 +529,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${file_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -534,7 +544,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${super_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -549,7 +559,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${shutdown_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi	
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -564,7 +574,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${create_user_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -580,7 +590,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s %-10s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -595,7 +605,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${repl_slave_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -612,7 +622,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s %-13s\n" ${db_priv} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -632,11 +642,15 @@ echo -n "6.2 检查日志文件是否存储在非系统分区" | tee -a ${REPORT
 if [[ ${binlogid} -eq 1 ]]; then
 	echo -e "\n\t二进制日志未启用，跳过检查。" >> ${REPORT}
 else
-	binlog_loc=`df -h ${binlog_base}.* | awk '{if (NR!=1) print $6}'`
-	if [[ ${binlog_loc} =~ /$|/var$|/usr$ ]]; then
-		echo -e "\n\t二进制日志文件 (${binlog_base}) 未存储在非系统分区。" >> ${REPORT}
+	if [[ ${binlog_baseid} -eq 1 ]]; then
+		echo -e "\n\t未配置二进制日志文件基本名，跳过检查。" >> ${REPORT}
 	else
-		echo -e "\n\t二进制日志文件 (${binlog_base}) 存储在非系统分区。" >> ${REPORT}
+		binlog_loc=`df -h ${binlog_base}.* | awk '{if (NR!=1) print $6}'`
+		if [[ ${binlog_loc} =~ /$|/var$|/usr$ ]]; then
+			echo -e "\n\t二进制日志文件 (${binlog_base}) 未存储在非系统分区。" >> ${REPORT}
+		else
+			echo -e "\n\t二进制日志文件 (${binlog_base}) 存储在非系统分区。" >> ${REPORT}
+		fi
 	fi
 fi
 
@@ -663,7 +677,7 @@ else
 fi
 
 if [[ ${relaylogid} -eq 1 ]]; then
-	echo -e "\t未配置中继日志，跳过检查。" >> ${REPORT}
+	echo -e "\t未配置中继日志文件基本名，跳过检查。" >> ${REPORT}
 else
 	relaylog_loc=`df -h ${relaylog_base} | awk '{if (NR!=1) print $6}'`
 	if [[ ${relaylog_loc} =~ /$|/var$|/usr$ ]]; then
@@ -715,7 +729,7 @@ else
 	echo -e "\n\tmysqld 启动命令行中未使用 --log-raw 选项。" >> ${REPORT}
 fi
 
-my_print_defaults mysqld | grep log-raw=OFF &> /dev/null
+${BASE}/my_print_defaults mysqld | grep log-raw=OFF &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\tlog-raw 选项已设置为 OFF。" >> ${REPORT}
 else
@@ -746,12 +760,14 @@ echo "..........[OK]"
 echo "" >> ${REPORT}
 
 echo -n "7.3 检查密码是否没有存储在全局配置中" | tee -a ${REPORT}
-my_print_defaults client | grep password &> /dev/null
+mv ~/.my.cnf ~/.my.cnf.1
+${BASE}/my_print_defaults client | grep password &> /dev/null
 if [[ $? -eq 0 ]]; then
 	echo -e "\n\t密码存储在全局配置中。" >> ${REPORT}
 else
 	echo -e "\n\t密码没有存储在全局配置中。" >> ${REPORT}
 fi
+mv ~/.my.cnf.1 ~/.my.cnf
 echo "..........[OK]"
 echo "" >> ${REPORT}
 
@@ -775,7 +791,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${output} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -833,7 +849,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${wildcard_host} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -848,7 +864,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${anonymous} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -876,7 +892,7 @@ if [[ ${DB_MYSQL} -eq 0 ]]; then
 		printf "%-10s %-10s\n" ${ssl_type} | sed 's/^/\t/g' >> ${REPORT}
 	fi
 else
-	echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+	echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 fi
 echo "..........[OK]"
 echo "" >> ${REPORT}
@@ -930,7 +946,7 @@ if [[ ${rpel_stat} -eq 0 ]]; then
 			echo -e "\n\tMASTER_SSL_VERIFY_SERVER_CERT 未设置为 YES 或 1。" >> ${REPORT}
 		fi
 	else
-		echo -e "\n\tmysql 数据库不存在，跳过检查。" >> ${REPORT}
+		echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 	fi
 else
 	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
@@ -940,20 +956,24 @@ echo "" >> ${REPORT}
 
 echo -n "9.4 检查主从复制用户的 super_priv 是否未设置为 Y" | tee -a ${REPORT}
 if [[ ${rpel_stat} -eq 0 ]]; then
-	for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
-		${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
-		if [[ $? -eq 0 ]]; then
-			${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and super_priv = 'Y';" >> /tmp/super_priv
-		fi
-	done
+	if [[ ${DB_MYSQL} -eq 0 ]]; then
+		for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
+			${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
+			if [[ $? -eq 0 ]]; then
+				${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and super_priv = 'Y';" >> /tmp/super_priv
+			fi
+		done
 
-	if [[ -s /tmp/super_priv ]]; then
-		echo -e "\n\t下列主从复制用户的 super_priv 设置了 Y：" >> ${REPORT}
-		sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/super_priv >> ${REPORT}
+		if [[ -s /tmp/super_priv ]]; then
+			echo -e "\n\t下列主从复制用户的 super_priv 设置了 Y：" >> ${REPORT}
+			sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/super_priv >> ${REPORT}
+		else
+			echo -e "\n\t主从复制用户的 super_priv 未设置 Y。" >> ${REPORT}
+		fi
+		rm -f /tmp/super_priv
 	else
-		echo -e "\n\t主从复制用户的 super_priv 未设置 Y。" >> ${REPORT}
+		echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 	fi
-	rm -f /tmp/super_priv
 else
 	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
 fi
@@ -962,20 +982,24 @@ echo "" >> ${REPORT}
 
 echo -n "9.5 检查是否没有主从复制用户使用通配符主机名" | tee -a ${REPORT}
 if [[ ${rpel_stat} -eq 0 ]]; then
-	for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
-		${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
-		if [[ $? -eq 0 ]]; then
-			${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and host = '%';" >> /tmp/rpel_user
-		fi
-	done
+	if [[ ${DB_MYSQL} -eq 0 ]]; then
+		for rpel_user in `${MY_EXEC} -e "select user from mysql.user;"`; do
+			${MY_EXEC} -e "show grants for ${rpel_user};" 2> /dev/null | grep "REPLICATION" &> /dev/null
+			if [[ $? -eq 0 ]]; then
+				${MY_EXEC} -e "select user, host from mysql.user where user='${rpel_user}' and host = '%';" >> /tmp/rpel_user
+			fi
+		done
 
-	if [[ -s /tmp/rpel_user ]]; then
-		echo -e "\n\t下列主从复制用户使用了通配符主机名：" >> ${REPORT}
-		sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/rpel_user >> ${REPORT}
+		if [[ -s /tmp/rpel_user ]]; then
+			echo -e "\n\t下列主从复制用户使用了通配符主机名：" >> ${REPORT}
+			sed '2,$s/user\s*host$//g; /^$/d; s/^/\t/g' /tmp/rpel_user >> ${REPORT}
+		else
+			echo -e "\n\t没有主从复制用户使用通配符主机名。" >> ${REPORT}
+		fi
+		rm -f /tmp/rpel_user
 	else
-		echo -e "\n\t没有主从复制用户使用通配符主机名。" >> ${REPORT}
+		echo -e "\n\tmysql 数据库不存在或无权访问，跳过检查。" >> ${REPORT}
 	fi
-	rm -f /tmp/rpel_user
 else
 	echo -e "\n\t主从复制未启用，跳过检查。" >> ${REPORT}
 fi
