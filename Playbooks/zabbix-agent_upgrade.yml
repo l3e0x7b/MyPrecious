@@ -1,0 +1,36 @@
+# A playbook to upgrade Zabbix Agent on multiple Linux distributions.
+---
+- hosts: all
+  remote_user: root
+  tasks:
+    - name: upgrade zabbix agent on rhel/centos
+      yum:
+        name: zabbix-agent
+        state: latest
+        update_only: yes
+      notify: restart zabbix agent service
+      when:
+        - ansible_os_family == "RedHat"
+    - name: upgrade zabbix agent on debian/ubuntu
+      apt:
+        name: zabbix-agent
+        state: latest
+        force_apt_get: true
+        only_upgrade: yes
+      notify: restart zabbix agent service
+      when:
+        - ansible_os_family == "Debian"
+    - name: install zabbix agent on suse
+      zypper:
+        name: zabbix-agent
+        state: latest
+        disable_gpg_check: true
+      notify: restart zabbix agent service
+      when:
+        - ansible_os_family == "Suse"
+  handlers:
+    - name: restart zabbix agent service
+      service:
+        name: zabbix-agent
+        enabled: true
+        state: restarted
