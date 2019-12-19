@@ -1,4 +1,9 @@
 #!/bin/bash
+##
+## Description: An initialization script for CentOS 7 Minimal.
+##
+## Author: l3e0x7b, <lyq0x7b@foxmail.com>
+##
 
 clear
 date=`date +%Y%m%d%H%M%S`
@@ -39,12 +44,14 @@ exec 2>${log_file}
 func_hostname () {
 	echo && echo -e "${cyan_fg_prefix}#################### Hostname Configuration ####################${fg_suffix}" && echo
 
-	hostname="localhost.localdomain"
+	hostname="localhost.localdomain"	# Can be replaced by whatever you like.
+
 	grep "${hostname}" /etc/hostname &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "${yello_fg_prefix}Hostname is ${hostname}${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Hostname will be set to \"${hostname}\"...${fg_suffix}"
+		hostname ${hostname}
 		hostnamectl set-hostname ${hostname}
 	fi
 }
@@ -53,25 +60,27 @@ func_network () {
 	echo && echo -e "${cyan_fg_prefix}#################### Network Configuration ####################${fg_suffix}" && echo
 
 	nic=$(ls /sys/class/net/ | grep "en\|eth" | head -n1)
+	
 	grep -i "^ONBOOT=no" /etc/sysconfig/network-scripts/ifcfg-${nic} &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "${magenta_fg_prefix}Network will be set to start on system boot...${fg_suffix}" && echo
 		sed -i "s/^ONBOOT=no/ONBOOT=yes/i" /etc/sysconfig/network-scripts/ifcfg-${nic}
 	else
-		echo -e "${yello_fg_prefix}Network already configured${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}Network is configured${skip_flag}${fg_suffix}"
 	fi
 }
 
 func_timezone() {
 	echo && echo -e "${cyan_fg_prefix}#################### Timezone Configuration ####################${fg_suffix}" && echo
 
-	timezone="Asia/Shanghai"
+	timezone="Asia/Shanghai"	# Can be replaced by any other time zone if needed.
+
 	timezone_old=`timedatectl | grep "Time zone" | awk '{print $3}'`
-	if [ "${timezone_old}" = "${timezone}" ]; then
-		echo -e "${yello_fg_prefix}Current timezone is \"${timezone}\"${skip_flag}${fg_suffix}"
+	if [[ ${timezone_old} = "${timezone}" ]]; then
+		echo -e "${yello_fg_prefix}Current time zone is \"${timezone}\"${skip_flag}${fg_suffix}"
 	else
-		echo -e "${magenta_fg_prefix}Timezone will be set to \"${timezone}\"...${fg_suffix}"
-		timedatectl set-timezone Asia/Shanghai
+		echo -e "${magenta_fg_prefix}Time zone will be set to \"${timezone}\"...${fg_suffix}"
+		timedatectl set-timezone ${timezone}
 	fi
 }
 
@@ -80,10 +89,11 @@ func_sshd() {
 
 	grep -i "^UseDNS no" /etc/ssh/sshd_config &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "${yello_fg_prefix}SSHD already configured${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}SSHD is configured${skip_flag}${fg_suffix}"
 	else
-		echo -e "${magenta_fg_prefix}The sshd option \"UseDNS\" will be set to \"no\"...${fg_suffix}"
+		echo -e "${magenta_fg_prefix}The SSHD option \"UseDNS\" will be set to \"no\"...${fg_suffix}"
 		sed -i "s/^#UseDNS yes/UseDNS no/i" /etc/ssh/sshd_config
+		systemctl restart sshd
 	fi
 }
 
@@ -92,7 +102,7 @@ func_epel() {
 
 	ls /etc/yum.repos.d | grep -i "epel" &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "${yello_fg_prefix}EPEL repo already installed${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}EPEL repo is installed${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Installing EPEL Repo...${fg_suffix}" && echo
 		curl -so /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
@@ -107,7 +117,7 @@ func_yum() {
 
 	grep -i "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "${yello_fg_prefix}Yum repo already configured${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}Yum repo is configured${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}The default repo will be replaced by Aliyun Repo...${fg_suffix}"
 
@@ -124,9 +134,10 @@ func_selinux() {
 
 	grep "^SELINUX=disabled" /etc/selinux/config &> /dev/null
 	if [[ $? -eq 0 ]]; then
-		echo -e "${yello_fg_prefix}SElinux already disabled${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}SElinux is disabled${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Disabling SELinux...${fg_suffix}"
+		setenforce 0
 		sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
 	fi
 }
@@ -134,17 +145,24 @@ func_selinux() {
 func_ntp() {
 	echo && echo -e "${cyan_fg_prefix}#################### Time Configuration ####################${fg_suffix}" && echo
 
-	ntpdatestat=$(yum info ntpdate | grep "Repo" | awk '{print $3}')
-
-	if [ "${ntpdatestat}" = "installed" ]; then
-		echo -e "${yello_fg_prefix}Ntpdate already installed, synchronizing system time with cn.pool.ntp.org...${fg_suffix}"
+	yum list installed | grep "ntpdate" &> /dev/null
+	if [[ $? -eq 0 ]]; then
+		grep "ntpdate" /etc/crontab &> /dev/null
+		if [[ $? -eq 0 ]]; then
+			echo -e "${yello_fg_prefix}Ntpdate is installed, synchronizing system time with cn.pool.ntp.org...${fg_suffix}"
+			ntpdate -u cn.pool.ntp.org
+		else
+			echo -e "${magenta_fg_prefix}Ntpdate is installed, setting time synchronization plan...${fg_suffix}"
+			echo "0 0 1 * * root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
+			service crond restart
+		fi
 	else
 		echo -e "${magenta_fg_prefix}Installing ntpdate and set time synchronization plan...${fg_suffix}" && echo
 	
-		yum install -y ntpdate
+		yum update -y && yum install -y ntpdate
 		ntpdate -u cn.pool.ntp.org
 
-		echo "0 0 1 * * root /usr/sbin/ntpdate -u cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
+		echo "0 0 1 * * root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
 		systemctl restart crond
 	fi
 }
@@ -152,7 +170,9 @@ func_ntp() {
 func_tools() {
 	echo && echo -e "${cyan_fg_prefix}#################### Tools installation ####################${fg_suffix}" && echo
 
+	# Add/delete as needed
 	tools="git yum-utils yum-cron wget net-tools vim-enhanced bash-completion mlocate lrzsz tcpdump lsof"
+	
 	for tool in ${tools}; do
 		yum list installed | grep "${tool}" &> /dev/null
 		if [[ $? -eq 0 ]]; then
@@ -175,7 +195,7 @@ func_tools() {
 	IFS_OLD=$IFS
 	IFS=$'\n'';'
 
-	# separated by ";"
+	# Add/delete as needed, separated by ';'.
 	groups="Development Tools"
 
 	for group in ${groups}; do
@@ -207,7 +227,7 @@ func_vim() {
 	IFS_OLD=$IFS
 	IFS=';'
 
-	# separated by ";"
+	# Add/delete as needed, separated by ';'.
 	vim_conf_list="set nocompatible;set fileformats=unix,dos;set go=;syntax on;set number;set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1;set fileencoding=utf-8;set encoding=utf-8;set shortmess=atI;autocmd InsertEnter * se cul;autocmd InsertEnter * se nocul;set completeopt=preview,menu;set tabstop=4;set softtabstop=4;set shiftwidth=4;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set wildmenu;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start"
 
 	for vim_conf in ${vim_conf_list}; do
@@ -222,12 +242,12 @@ func_vim() {
 	IFS=$IFS_OLD
 
 	if [[ -s /tmp/vimrc ]]; then
-		echo -e "${magenta_fg_prefix}Configuring vim...${fg_suffix}"
+		echo -e "${magenta_fg_prefix}Configuring VIM...${fg_suffix}"
 		cat /tmp/vimrc >> /etc/vimrc
 
 		rm -f /tmp/vimrc
 	else
-		echo -e "${yello_fg_prefix}VIM already configured${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}VIM is configured${skip_flag}${fg_suffix}"
 	fi
 }
 
@@ -305,7 +325,7 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check NTP]${fg_suffix}"
-	yum list installed |grep ntpdate &> /dev/null
+	yum list installed | grep ntpdate &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		grep "ntpdate" /etc/crontab &> /dev/null
 		if [[ $? -eq 0 ]]; then
@@ -367,7 +387,7 @@ func_reboot() {
 
 	read -p "All tasks completed! Reboot immediately(recommended)[Y/y] or later[Enter]? " reboot_ans
 
-	if [ "${reboot_ans}" = "Y" -o "${reboot_ans}" = "y" ]; then
+	if [[ ${reboot_ans} = "Y" || ${reboot_ans} = "y" ]]; then
 		echo && echo -e "${magenta_fg_prefix}Now reboot...${fg_suffix}"
 		reboot
 	else
