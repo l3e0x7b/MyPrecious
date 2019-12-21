@@ -28,9 +28,9 @@ fi
 echo && echo -e "${cyan_fg_prefix}####################### Task List #######################
 # 1) Hostname Configuration  2) Network Configuration   #
 # 3) Timezone Configuration  4) SSHD Configuration      #
-# 5) Yum Repo Configuration  6) EPEL Repo Configuration #
+# 5) EPEL Repo Configuration 6) Yum Repo Configuration  #
 # 7) SELinux Configuration   8) Time Configuration      #
-# 9) Tools installation      10) VIM Configuration      #
+# 9) Tools installation      10) Vim Configuration      #
 # *Tasks Check               *Reboot                    #
 #########################################################${fg_suffix}" && echo
 
@@ -117,13 +117,13 @@ func_epel() {
 func_yum() {
 	echo && echo -e "${cyan_fg_prefix}#################### Yum Repo Configuration ####################${fg_suffix}" && echo
 
-	grep -i "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null
+	grep "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null
 	if [[ $? -eq 0 ]]; then
 		echo -e "${yello_fg_prefix}Yum repo is configured${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}The default repo will be replaced by Aliyun Repo...${fg_suffix}"
 
-		mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak
+		mv -f /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak
 		curl -so /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-6.repo
 
 		yum clean all
@@ -224,7 +224,7 @@ func_tools() {
 }
 
 func_vim() {
-	echo && echo -e "${cyan_fg_prefix}#################### VIM Configuration ####################${fg_suffix}" && echo
+	echo && echo -e "${cyan_fg_prefix}#################### Vim Configuration ####################${fg_suffix}" && echo
 
 	IFS_OLD=$IFS
 	IFS=';'
@@ -232,24 +232,26 @@ func_vim() {
 	# Add/delete as needed, separated by ';'.
 	vim_conf_list="set nocompatible;set fileformats=unix,dos;set go=;syntax on;set number;set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1;set fileencoding=utf-8;set encoding=utf-8;set shortmess=atI;autocmd InsertEnter * se cul;autocmd InsertEnter * se nocul;set completeopt=preview,menu;set tabstop=4;set softtabstop=4;set shiftwidth=4;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set wildmenu;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start"
 
+	vim_conf_list=`echo "${vim_conf_list}" | sed 's/\\*/\\\*/g'`
+
 	for vim_conf in ${vim_conf_list}; do
-		grep -F "${vim_conf}" /etc/vimrc &> /dev/null
+		grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null
 
 		if [[ $? -eq 0 ]]; then
 			continue
 		else
-			echo "${vim_conf}" >> /tmp/vimrc
+			echo "${vim_conf}" | sed 's/\\\*/*/' >> /tmp/vimrc
 		fi
 	done
 	IFS=$IFS_OLD
 
 	if [[ -s /tmp/vimrc ]]; then
-		echo -e "${magenta_fg_prefix}Configuring VIM...${fg_suffix}"
+		echo -e "${magenta_fg_prefix}Configuring Vim...${fg_suffix}"
 		cat /tmp/vimrc >> /etc/vimrc
 
 		rm -f /tmp/vimrc
 	else
-		echo -e "${yello_fg_prefix}VIM is configured${skip_flag}${fg_suffix}"
+		echo -e "${yello_fg_prefix}Vim is configured${skip_flag}${fg_suffix}"
 	fi
 }
 
@@ -370,11 +372,13 @@ func_check() {
 	IFS=';'
 
 	for vim_conf in ${vim_conf_list}; do
-		grep -F "${vim_conf}" /etc/vimrc &> /dev/null
+		grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null
 
 		if [[ $? -eq 0 ]]; then
+			vim_conf=`echo "${vim_conf}" | sed 's/\\\\\*/*/'`
 			echo -e "\t${green_fg_prefix}[${vim_conf}]${fg_suffix}${ok_flag}"
 		else
+			vim_conf=`echo "${vim_conf}" | sed 's/\\\\\*/*/'`
 			echo -e "\t${red_fg_prefix}[${vim_conf}]${fg_suffix}${failed_flag}"
 		fi
 	done
