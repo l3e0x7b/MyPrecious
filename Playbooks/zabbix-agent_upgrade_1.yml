@@ -1,0 +1,26 @@
+# Another playbook to upgrade Zabbix Agent on multiple Linux distributions.
+---
+- hosts: all
+  vars:
+    agent_major_version: 4.4
+  remote_user: root
+  tasks:
+    - name: upgrade repo
+      yum:
+        name: https://repo.zabbix.com/zabbix/{{ agent_major_version }}/rhel/{{ ansible_distribution_major_version }}/{{ ansible_architecture }}/zabbix-release-{{ agent_major_version }}-1.el{{ ansible_distribution_major_version }}.noarch.rpm
+        update_cache: yes
+        state: latest
+    - name: upgrade zabbix agent
+      yum:
+        name: zabbix-agent
+        state: latest
+        update_only: yes
+        update_cache: yes
+      notify: restart zabbix agent service
+  handlers:
+    - name: restart service
+      service:
+        name: zabbix-agent
+        enabled: true
+        state: restarted
+      listen: restart zabbix agent service
