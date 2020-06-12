@@ -48,8 +48,19 @@ backup_db () {
 	pkill dropbox
 }
 
+# Delete old backups.
+backup_del () {
+	count=`ls ${DROPBOX} | wc -l`
+	while [[ ${count} -gt 7 ]]; do
+		ls -t ${DROPBOX} | tail -n 1 | xargs -i rm -f ${DROPBOX}/{}
+		count=$(( ${count} - 1 ))
+	done
+}
+
 case "$1" in
 	--all) backup_all ;;
 	--db|'') backup_db ;;
 	*) echo "Unrecognized option '$1'" ;;
 esac
+
+backup_del
