@@ -1,0 +1,21 @@
+# A playbook to upgrade nextcloud(running with docker-compose)
+---
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  vars:
+    nc_path: /opt/nextcloud
+    ds_path: /opt/onlyoffice/DocumentServer
+  tasks:
+    - name: Tear down nextcloud services
+      docker_compose:
+        project_src: "{{ nc_path }}"
+        state: absent
+    - name: Pull latest images and start services
+      docker_compose:
+        project_src: "{{ nc_path }}"
+        pull: yes
+        state: present
+    - name: Prune old images
+      docker_prune:
+        images: yes
