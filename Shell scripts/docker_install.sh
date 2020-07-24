@@ -1,24 +1,21 @@
 #!/bin/bash
 
-curl -fsSL get.docker.com -o get-docker.sh
+curl -sSL get.docker.com -o get-docker.sh
 if [[ $? -eq 0 ]]; then
 	sh get-docker.sh --mirror Aliyun
 
 	if [[ $? -eq 0 ]]; then
-		systemctl enable docker
-		systemctl start docker
-
 		if [[ -f /etc/redhat-release ]]; then
 			sysctl -p
 
-			docker info | grep "WARNING: bridge-nf-call-iptables is disabled" &> /dev/null
-			if [[ $? -eq 0 ]]; then
-				echo "net.bridge.bridge-nf-call-iptables = 1"
+			grep '1' /proc/sys/net/bridge/bridge-nf-call-iptables &> /dev/null
+			if [[ $? -ne 0 ]]; then
+				echo "net.bridge.bridge-nf-call-iptables = 1" >> /etc/sysctl.conf
 			fi
 			
-			docker info | grep "WARNING: bridge-nf-call-ip6tables is disabled" &> /dev/null
-			if [[ $? -eq 0 ]]; then
-				echo "net.bridge.bridge-nf-call-ip6tables = 1"
+			grep '1' /proc/sys/net/bridge/bridge-nf-call-ip6tables &> /dev/null
+			if [[ $? -ne 0 ]]; then
+				echo "net.bridge.bridge-nf-call-ip6tables = 1" >> /etc/sysctl.conf
 			fi
 			
 			sysctl -p
@@ -26,15 +23,22 @@ if [[ $? -eq 0 ]]; then
 
 		cat <<-EOF > /etc/docker/daemon.json
 {
+	"exec-opts": ["native.cgroupdriver=systemd"],
+	"log-driver": "json-file",
+	"log-opts": {"max-size": "100m"},
+	"storage-driver": "overlay2",
+	"storage-opts": ["overlay2.override_kernel_check=true"],
 	"registry-mirrors": [
 		"https://dockerhub.azk8s.cn",
-		"https://reg-mirror.qiniu.com"
+		"https://tuyjisn6.mirror.aliyuncs.com",
+		"https://hub-mirror.c.163.com"
 	]
 }
 EOF
 
 		systemctl daemon-reload
-		systemctl restart docker
+		systemctl enable docker
+		systemctl start docker
 
 		rm -f get-docker.sh
 
