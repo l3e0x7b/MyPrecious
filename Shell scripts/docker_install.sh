@@ -21,6 +21,9 @@ if [[ $? -eq 0 ]]; then
 			sysctl -p
 		fi
 
+		systemctl enable docker
+		systemctl start docker
+
 		cat <<-EOF > /etc/docker/daemon.json
 {
 	"exec-opts": ["native.cgroupdriver=systemd"],
@@ -37,8 +40,7 @@ if [[ $? -eq 0 ]]; then
 EOF
 
 		systemctl daemon-reload
-		systemctl enable docker
-		systemctl start docker
+		systemctl restart docker
 
 		rm -f get-docker.sh
 
