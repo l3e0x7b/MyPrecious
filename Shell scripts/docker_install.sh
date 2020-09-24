@@ -19,6 +19,12 @@ if [[ $? -eq 0 ]]; then
 			fi
 			
 			sysctl -p
+		elif [[ -f /etc/debian_version ]]; then
+			grep '^GRUB_CMDLINE_LINUX=' /etc/default/grub | grep 'cgroup_enable=memory swapaccount=1' &> /dev/null
+			if [[ $? -ne 0 ]]; then
+				sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 cgroup_enable=memory swapaccount=1"/' /etc/default/grub
+				update-grub
+			fi
 		fi
 
 		systemctl enable docker
@@ -32,7 +38,6 @@ if [[ $? -eq 0 ]]; then
 	"storage-driver": "overlay2",
 	"storage-opts": ["overlay2.override_kernel_check=true"],
 	"registry-mirrors": [
-		"https://dockerhub.azk8s.cn",
 		"https://tuyjisn6.mirror.aliyuncs.com",
 		"https://hub-mirror.c.163.com"
 	]
