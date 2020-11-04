@@ -21,7 +21,7 @@ skip_flag="${yello_fg_prefix}....................[SKIP]${fg_suffix}"
 echo "Testing network connection..."
 ping -c 4 223.5.5.5 &> /dev/null
 if [[ $? -ne 0 ]]; then
-	echo "Can not connect to Internet, please check network connection."
+	echo "Can not connect to Internet, please check network connection." && echo
 	exit
 fi
 
@@ -43,7 +43,7 @@ exec 2>${log_file}
 func_hostname () {
 	echo && echo -e "${cyan_fg_prefix}#################### Hostname Configuration ####################${fg_suffix}" && echo
 
-	hostname="localhost"	# Can be replaced by whatever you like.
+	hostname="localhost"
 
 	grep "${hostname}" /etc/hostname &> /dev/null
 	if [[ $? -eq 0 ]]; then
@@ -72,7 +72,7 @@ func_network () {
 func_timezone() {
 	echo && echo -e "${cyan_fg_prefix}#################### Timezone Configuration ####################${fg_suffix}" && echo
 
-	timezone="Asia/Shanghai"	# Can be replaced by any other time zone if needed.
+	timezone="Asia/Shanghai"
 
 	timezone_old=`timedatectl | grep "Time zone" | awk '{print $3}'`
 	if [[ ${timezone_old} = "${timezone}" ]]; then
@@ -92,23 +92,25 @@ func_apt() {
 	else
 		echo -e "${magenta_fg_prefix}The default repo will be replaced by Aliyun Repo...${fg_suffix}"
 
+		dist=`grep "DISTRIB_CODENAME" /etc/lsb-release | awk -F= '{print $2}'`
+
 		mv -f /etc/apt/sources.list /etc/apt/sources.list.bak
+
 		cat <<-EOF > /etc/apt/sources.list
-			deb http://mirrors.aliyun.com/ubuntu/ xenial main
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial main
+			deb http://mirrors.aliyun.com/ubuntu/ ${dist} main restricted universe multiverse
+			deb-src http://mirrors.aliyun.com/ubuntu/ ${dist} main restricted universe multiverse
+
+			deb http://mirrors.aliyun.com/ubuntu/ ${dist}-security main restricted universe multiverse
+			deb-src http://mirrors.aliyun.com/ubuntu/ ${dist}-security main restricted universe multiverse
 			
-			deb http://mirrors.aliyun.com/ubuntu/ xenial-updates main
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial-updates main
+			deb http://mirrors.aliyun.com/ubuntu/ ${dist}-updates main restricted universe multiverse
+			deb-src http://mirrors.aliyun.com/ubuntu/ ${dist}-updates main restricted universe multiverse
 			
-			deb http://mirrors.aliyun.com/ubuntu/ xenial universe
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial universe
-			deb http://mirrors.aliyun.com/ubuntu/ xenial-updates universe
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial-updates universe
+			deb http://mirrors.aliyun.com/ubuntu/ ${dist}-proposed main restricted universe multiverse
+			deb-src http://mirrors.aliyun.com/ubuntu/ ${dist}-proposed main restricted universe multiverse
 			
-			deb http://mirrors.aliyun.com/ubuntu/ xenial-security main
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial-security main
-			deb http://mirrors.aliyun.com/ubuntu/ xenial-security universe
-			deb-src http://mirrors.aliyun.com/ubuntu/ xenial-security universe
+			deb http://mirrors.aliyun.com/ubuntu/ ${dist}-backports main restricted universe multiverse
+			deb-src http://mirrors.aliyun.com/ubuntu/ ${dist}-backports main restricted universe multiverse
 EOF
 
 		apt update && apt upgrade -y
@@ -126,7 +128,7 @@ func_ntp() {
 			ntpdate -u cn.pool.ntp.org
 		else
 			echo -e "${magenta_fg_prefix}Ntpdate is installed, setting time synchronization plan...${fg_suffix}"
-			echo "0 0 1 * * root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
+			echo "0 0 * * 1 root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
 			systemctl restart cron
 		fi
 	else
@@ -135,7 +137,7 @@ func_ntp() {
 		apt install -y ntpdate
 		ntpdate -u cn.pool.ntp.org
 
-		echo "0 0 1 * * root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
+		echo "0 0 * * 1 root /usr/sbin/ntpdate -su cn.pool.ntp.org 2>&1 /dev/null" >> /etc/crontab
 		systemctl restart cron
 	fi
 }
@@ -143,8 +145,7 @@ func_ntp() {
 func_tools() {
 	echo && echo -e "${cyan_fg_prefix}#################### Tools installation ####################${fg_suffix}" && echo
 
-	# Add/delete as needed
-	tools="git wget net-tools vim bash-completion mlocate lrzsz tcpdump lsof"
+	tools="apt-utils coreutils net-tools openssl procps lsof bash-completion git wget vim mlocate lrzsz tcpdump"
 	
 	for tool in ${tools}; do
 		dpkg -s "${tool}" &> /dev/null
@@ -158,7 +159,7 @@ func_tools() {
 	if [[ -s /tmp/tools.txt ]]; then
 		ntools=`cat /tmp/tools.txt | xargs`
 		echo -e "${magenta_fg_prefix}Expected tools will be installed...${fg_suffix}" && echo
-		apt update && apt install -y ${ntools}
+		apt install -y ${ntools}
 
 		rm -f /tmp/tools.txt &> /dev/null
 	else
@@ -172,7 +173,7 @@ func_vim() {
 	IFS_OLD=$IFS
 	IFS=';'
 
-	# Add/delete as needed, separated by ';'.
+	# Append/delete as needed, separated by ';'.
 	vim_conf_list="set nocompatible;set fileformats=unix,dos;set go=;syntax on;set number;set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1;set fileencoding=utf-8;set encoding=utf-8;set shortmess=atI;autocmd InsertEnter * se cul;autocmd InsertEnter * se nocul;set completeopt=preview,menu;set tabstop=4;set softtabstop=4;set shiftwidth=4;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set wildmenu;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start"
 
 	vim_conf_list=`echo "${vim_conf_list}" | sed 's/\\*/\\\*/g'`
