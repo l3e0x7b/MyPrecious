@@ -1,4 +1,9 @@
 #!/bin/bash
+##
+## Description: Docker installation script for Linux.
+##
+## Author: l3e0x7b, <lyq0x7b@foxmail.com>
+##
 
 curl -sSL get.docker.com -o get-docker.sh
 if [[ $? -eq 0 ]]; then
@@ -50,8 +55,8 @@ EOF
 		rm -f get-docker.sh
 
 		# install docker-compose
-		dc_ver=`curl -s https://docs.docker.com/compose/install/ | grep -A1 "The instructions below outline installation" | sed '1d;s/.*<strong>v//;s/<\/strong>.*$//'`
-		curl -L https://github.com/docker/compose/releases/download/${dc_ver}/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+		dc_ver=`curl -s https://api.github.com/repos/docker/compose/releases/latest | grep "tag_name" | sed 's/^.*: "//;s/",.*$//'`
+		curl -L https://github.com/docker/compose/releases/download/${dc_ver}/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
 		if [[ $? -eq 0 ]]; then
 			chmod +x /usr/local/bin/docker-compose
 
