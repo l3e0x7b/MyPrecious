@@ -228,7 +228,7 @@ func_vim() {
 	IFS=';'
 
 	# Add/delete as needed, separated by ';'.
-	vim_conf_list="set nocompatible;set fileformats=unix,dos;set go=;syntax on;set number;set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1;set fileencoding=utf-8;set encoding=utf-8;set shortmess=atI;autocmd InsertEnter * se cul;autocmd InsertEnter * se nocul;set completeopt=preview,menu;set tabstop=4;set softtabstop=4;set shiftwidth=4;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set wildmenu;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start"
+	vim_conf_list="set nocompatible;set showmode;set showcmd;set fileformats=unix,dos;set go=;syntax on;set number;set encoding=utf-8;set fileencoding=utf-8;set fileencodings=ucs-bom,utf-8,cp936,gb18030,big5,euc-jp,euc-kr,latin1;set shortmess=atI;set completeopt=menu,preview;set tabstop=2;set softtabstop=2;set shiftwidth=2;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set ruler;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start;set t_Co=256;set autoindent;set smartindent;filetype plugin indent on;set linebreak;set wrapmargin=2;set laststatus=2;set spell spelllang=en_us;set nobackup;set wildmenu;set wildmode=longest:list,full"
 
 	vim_conf_list=`echo "${vim_conf_list}" | sed 's/\\*/\\\*/g'`
 
