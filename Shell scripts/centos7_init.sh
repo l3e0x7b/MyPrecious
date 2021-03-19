@@ -6,7 +6,7 @@
 ##
 
 clear
-date=`date +%Y%m%d%H%M%S`
+date=$(date +%Y%m%d%H%M%S)
 log_file="/var/log/init_err_${date}.log"
 red_fg_prefix="\e[31m"
 green_fg_prefix="\e[32m"
@@ -19,11 +19,8 @@ ok_flag="${green_fg_prefix}....................[OK]${fg_suffix}"
 skip_flag="${yello_fg_prefix}....................[SKIP]${fg_suffix}"
 
 echo "Testing network connection..."
-ping -c 4 223.5.5.5 &> /dev/null
-if [[ $? -ne 0 ]]; then
-	echo "Can not connect to Internet, please check network connection."
-	exit
-fi
+
+! ping -c 4 223.5.5.5 &> /dev/null && echo "Can not connect to Internet, please check network connection." && exit
 
 echo && echo -e "${cyan_fg_prefix}####################### Task List #######################
 # 1) Hostname Configuration  2) Network Configuration   #
@@ -34,20 +31,19 @@ echo && echo -e "${cyan_fg_prefix}####################### Task List ############
 # *Tasks Check               *Reboot                    #
 #########################################################${fg_suffix}" && echo
 
-read -n 1 -p "Press any key to start: "
+read -nr 1 -p "Press any key to start: "
 
 # exec 3>&1
 # exec 1>${log_file}
 exec 4>&2
-exec 2>${log_file}
+exec 2>"${log_file}"
 
 func_hostname () {
 	echo && echo -e "${cyan_fg_prefix}#################### Hostname Configuration ####################${fg_suffix}" && echo
 
 	hostname="localhost.localdomain"	# Can be replaced by whatever you like.
 
-	grep "${hostname}" /etc/hostname &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if grep "${hostname}" /etc/hostname &> /dev/null; then
 		echo -e "${yello_fg_prefix}Hostname is ${hostname}${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Hostname will be set to \"${hostname}\"...${fg_suffix}"
@@ -60,11 +56,10 @@ func_network () {
 	echo && echo -e "${cyan_fg_prefix}#################### Network Configuration ####################${fg_suffix}" && echo
 
 	nic=$(ls /sys/class/net/ | grep "en\|eth" | head -n1)
-	
-	grep -i "^ONBOOT=no" /etc/sysconfig/network-scripts/ifcfg-${nic} &> /dev/null
-	if [[ $? -eq 0 ]]; then
+
+	if grep -i "^ONBOOT=no" /etc/sysconfig/network-scripts/ifcfg-"${nic}" &> /dev/null; then
 		echo -e "${magenta_fg_prefix}Network will be set to start on system boot...${fg_suffix}" && echo
-		sed -i "s/^ONBOOT=no/ONBOOT=yes/i" /etc/sysconfig/network-scripts/ifcfg-${nic}
+		sed -i "s/^ONBOOT=no/ONBOOT=yes/i" /etc/sysconfig/network-scripts/ifcfg-"${nic}"
 	else
 		echo -e "${yello_fg_prefix}Network is configured${skip_flag}${fg_suffix}"
 	fi
@@ -75,7 +70,7 @@ func_timezone() {
 
 	timezone="Asia/Shanghai"	# Can be replaced by any other time zone if needed.
 
-	timezone_old=`timedatectl | grep "Time zone" | awk '{print $3}'`
+	timezone_old=$(timedatectl | grep "Time zone" | awk '{print $3}')
 	if [[ ${timezone_old} = "${timezone}" ]]; then
 		echo -e "${yello_fg_prefix}Current time zone is \"${timezone}\"${skip_flag}${fg_suffix}"
 	else
@@ -87,8 +82,7 @@ func_timezone() {
 func_sshd() {
 	echo && echo -e "${cyan_fg_prefix}#################### SSHD Configuration ####################${fg_suffix}" && echo
 
-	grep -i "^UseDNS no" /etc/ssh/sshd_config &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if grep -i "^UseDNS no" /etc/ssh/sshd_config &> /dev/null; then
 		echo -e "${yello_fg_prefix}SSHD is configured${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}The SSHD option \"UseDNS\" will be set to \"no\"...${fg_suffix}"
@@ -100,8 +94,7 @@ func_sshd() {
 func_epel() {
 	echo && echo -e "${cyan_fg_prefix}#################### EPEL Repo Configuration ####################${fg_suffix}" && echo
 
-	ls /etc/yum.repos.d | grep -i "epel" &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if ls /etc/yum.repos.d | grep -i "epel" &> /dev/null; then
 		echo -e "${yello_fg_prefix}EPEL repo is installed${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Installing EPEL Repo...${fg_suffix}" && echo
@@ -115,8 +108,7 @@ func_epel() {
 func_yum() {
 	echo && echo -e "${cyan_fg_prefix}#################### Yum Repo Configuration ####################${fg_suffix}" && echo
 
-	grep "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if grep "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null; then
 		echo -e "${yello_fg_prefix}Yum repo is configured${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}The default repo will be replaced by Aliyun Repo...${fg_suffix}"
@@ -132,8 +124,7 @@ func_yum() {
 func_selinux() {
 	echo && echo -e "${cyan_fg_prefix}#################### SELinux Configuration ####################${fg_suffix}" && echo
 
-	grep "^SELINUX=disabled" /etc/selinux/config &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	if grep "^SELINUX=disabled" /etc/selinux/config &> /dev/null; then
 		echo -e "${yello_fg_prefix}SElinux is disabled${skip_flag}${fg_suffix}"
 	else
 		echo -e "${magenta_fg_prefix}Disabling SELinux...${fg_suffix}"
@@ -145,10 +136,9 @@ func_selinux() {
 func_ntp() {
 	echo && echo -e "${cyan_fg_prefix}#################### Time Configuration ####################${fg_suffix}" && echo
 
-	yum list installed | grep "ntpdate" &> /dev/null
-	if [[ $? -eq 0 ]]; then
-		grep "ntpdate" /etc/crontab &> /dev/null
-		if [[ $? -eq 0 ]]; then
+	if yum list installed | grep "ntpdate" &> /dev/null; then
+		
+		if grep "ntpdate" /etc/crontab &> /dev/null; then
 			echo -e "${yello_fg_prefix}Ntpdate is installed, synchronizing system time with cn.pool.ntp.org...${fg_suffix}"
 			ntpdate -u cn.pool.ntp.org
 		else
@@ -174,8 +164,8 @@ func_tools() {
 	tools="git yum-utils yum-cron wget net-tools vim-enhanced bash-completion mlocate lrzsz tcpdump lsof"
 	
 	for tool in ${tools}; do
-		yum list installed | grep "${tool}" &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		
+		if yum list installed | grep "${tool}" &> /dev/null; then
 			continue
 		else
 			echo "${tool}" >> /tmp/tools.txt
@@ -183,9 +173,9 @@ func_tools() {
 	done
 
 	if [[ -s /tmp/tools.txt ]]; then
-		ntools=`cat /tmp/tools.txt | xargs`
+		ntools=$(cat /tmp/tools.txt | xargs)
 		echo -e "${magenta_fg_prefix}Expected tools will be installed...${fg_suffix}" && echo
-		yum update -y && yum install -y ${ntools}
+		yum update -y && yum install -y "${ntools}"
 
 		rm -f /tmp/tools.txt &> /dev/null
 	else
@@ -199,8 +189,8 @@ func_tools() {
 	groups="Development Tools"
 
 	for group in ${groups}; do
-		yum group list installed | grep "${group}" &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		
+		if yum group list installed | grep "${group}" &> /dev/null; then
 			continue
 		else
 			echo "${group}" >> /tmp/groups.txt
@@ -210,9 +200,9 @@ func_tools() {
 	if [[ -s /tmp/groups.txt ]]; then
 		echo -e "${magenta_fg_prefix}Expected groups will be installed...${fg_suffix}" && echo
 
-		for group in `cat /tmp/groups.txt`; do
-			yum group install -y ${group}
-		done
+		while read -r group; do
+			yum group install -y "${group}"
+		done < /tmp/groups.txt
 		
 		rm -f /tmp/groups.txt &> /dev/null
 	else
@@ -230,15 +220,12 @@ func_vim() {
 	# Add/delete as needed, separated by ';'.
 	vim_conf_list="set nocompatible;set showmode;set showcmd;set fileformats=unix,dos;set go=;syntax on;set number;set encoding=utf-8;set fileencoding=utf-8;set fileencodings=ucs-bom,utf-8,cp936,gb18030,big5,euc-jp,euc-kr,latin1;set shortmess=atI;set completeopt=menu,preview;set tabstop=2;set softtabstop=2;set shiftwidth=2;set noexpandtab;set ignorecase;set showmatch;set matchtime=0;set ruler;set hlsearch;set incsearch;set noerrorbells;set backspace=indent,eol,start;set t_Co=256;set autoindent;set smartindent;filetype plugin indent on;set linebreak;set wrapmargin=2;set laststatus=2;set spell spelllang=en_us;set nobackup;set wildmenu;set wildmode=longest:list,full"
 
-	vim_conf_list=`echo "${vim_conf_list}" | sed 's/\\*/\\\*/g'`
-
 	for vim_conf in ${vim_conf_list}; do
-		grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null
-
-		if [[ $? -eq 0 ]]; then
+		
+		if grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null; then
 			continue
 		else
-			echo "${vim_conf}" | sed 's/\\\*/*/' >> /tmp/vimrc
+			echo "${vim_conf}" >> /tmp/vimrc
 		fi
 	done
 	IFS=$IFS_OLD
@@ -257,8 +244,8 @@ func_check() {
 	echo && echo -e "${cyan_fg_prefix}#################### Tasks Check ####################${fg_suffix}" && echo
 
 	echo -e "${magenta_fg_prefix}[Check Hostname]${fg_suffix}"
-	grep "${hostname}" /etc/hostname &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if grep "${hostname}" /etc/hostname &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -267,8 +254,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check Network]${fg_suffix}"
-	grep -i "^ONBOOT=yes" /etc/sysconfig/network-scripts/ifcfg-${nic} &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if grep -i "^ONBOOT=yes" /etc/sysconfig/network-scripts/ifcfg-"${nic}" &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -277,8 +264,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check Timezone]${fg_suffix}"
-	timedatectl | grep "Asia/Shanghai" &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if timedatectl | grep "Asia/Shanghai" &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -287,8 +274,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check SSHD]${fg_suffix}"
-	grep "^UseDNS no" /etc/ssh/sshd_config &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if grep "^UseDNS no" /etc/ssh/sshd_config &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -297,8 +284,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check EPEL]${fg_suffix}"
-	ls /etc/yum.repos.d | grep -i "epel" &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if ls /etc/yum.repos.d | grep -i "epel" &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -307,8 +294,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check Yum]${fg_suffix}"
-	grep "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if grep "aliyun" /etc/yum.repos.d/CentOS-Base.repo &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -317,8 +304,8 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check SELinux]${fg_suffix}"
-	grep "^SELINUX=disabled" /etc/selinux/config &> /dev/null
-	if [[ $? -eq 0 ]]; then
+	
+	if grep "^SELINUX=disabled" /etc/selinux/config &> /dev/null; then
 		echo -e "${ok_flag}"
 	else
 		echo -e "${failed_flag}"
@@ -327,10 +314,10 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check NTP]${fg_suffix}"
-	yum list installed | grep ntpdate &> /dev/null
-	if [[ $? -eq 0 ]]; then
-		grep "ntpdate" /etc/crontab &> /dev/null
-		if [[ $? -eq 0 ]]; then
+	
+	if yum list installed | grep ntpdate &> /dev/null; then
+		
+		if grep "ntpdate" /etc/crontab &> /dev/null; then
 			echo -e "${ok_flag}"
 		else
 			echo -e "${failed_flag}"
@@ -342,9 +329,10 @@ func_check() {
 	##############################
 
 	echo -e "${magenta_fg_prefix}[Check Tools]${fg_suffix}"
+	
 	for tool in ${tools}; do
-		yum list installed | grep "${tool}" &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		
+		if yum list installed | grep "${tool}" &> /dev/null; then
 			echo -e "\t${green_fg_prefix}[${tool}]${fg_suffix}${ok_flag}"
 		else
 			echo -e "\t${red_fg_prefix}[${tool}]${fg_suffix}${failed_flag}"
@@ -354,8 +342,8 @@ func_check() {
 	IFS_OLD=$IFS
 	IFS=';'
 	for group in ${groups}; do
-		yum group list installed | grep "${group}" &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		
+		if yum group list installed | grep "${group}" &> /dev/null; then
 			echo -e "\t${green_fg_prefix}[${group}]${fg_suffix}${ok_flag}"
 		else
 			echo -e "\t${red_fg_prefix}[${group}]${fg_suffix}${failed_flag}"
@@ -370,13 +358,10 @@ func_check() {
 	IFS=';'
 
 	for vim_conf in ${vim_conf_list}; do
-		grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null
-
-		if [[ $? -eq 0 ]]; then
-			vim_conf=`echo "${vim_conf}" | sed 's/\\\\\*/*/'`
+		
+		if grep "^\s*${vim_conf}" /etc/vimrc &> /dev/null; then
 			echo -e "\t${green_fg_prefix}[${vim_conf}]${fg_suffix}${ok_flag}"
 		else
-			vim_conf=`echo "${vim_conf}" | sed 's/\\\\\*/*/'`
 			echo -e "\t${red_fg_prefix}[${vim_conf}]${fg_suffix}${failed_flag}"
 		fi
 	done
@@ -389,7 +374,7 @@ func_reboot() {
 	echo -e "${cyan_fg_prefix}################################################################################${fg_suffix}" && echo
 	echo -e "${magenta_fg_prefix}Errors has been saved to [/var/log/init_err_${date}.log].${fg_suffix}" && echo
 
-	read -p "All tasks completed! Reboot immediately(recommended)[Y/y] or later[Enter]? " reboot_ans
+	read -pr "All tasks completed! Reboot immediately(recommended)[Y/y] or later[Enter]? " reboot_ans
 
 	if [[ ${reboot_ans} = "Y" || ${reboot_ans} = "y" ]]; then
 		echo && echo -e "${magenta_fg_prefix}Now reboot...${fg_suffix}"
