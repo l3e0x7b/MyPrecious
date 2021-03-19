@@ -9,15 +9,15 @@
 ##   --db   back up database only (default)
 ##
 
-DROPBOX="$HOME/Dropbox/BitWBackups"
+dropbox="$HOME/Dropbox/BitWBackups"
 
 # Back up all data.
 backup_all () {
-	DATA_FOLDER="/opt/bitwarden_rs"
-	BACKUP_FILE="bitwarden_rs_$(date "+%F-%H%M%S")"
+	data_folder="/opt/bitwarden_rs"
+	backup_file="bitwarden_rs_$(date "+%F-%H%M%S")"
 
-	cd $DATA_FOLDER
-	tar -czf $DROPBOX/$BACKUP_FILE.tgz ./*
+	cd ${data_folder} || exit
+	tar -czf "${dropbox}"/"${backup_file}".tgz ./*
 
 	~/.dropbox-dist/dropboxd &> /dev/null &
 
@@ -28,18 +28,18 @@ backup_all () {
 
 # Back up database only.
 backup_db () {
-	DATA_FOLDER="/opt/bitwarden_rs/bw-data"
-	BACKUP_FILE="db.sqlite3_$(date "+%F-%H%M%S")"
+	data_folder="/opt/bitwarden_rs/bw-data"
+	backup_file="db.sqlite3_$(date "+%F-%H%M%S")"
 
-	if [[ ! -d $DATA_FOLDER/db-backup ]]; then
-		mkdir $DATA_FOLDER/db-backup
+	if [[ ! -d $data_folder/db-backup ]]; then
+		mkdir $data_folder/db-backup
 	fi
 	
-	sqlite3 $DATA_FOLDER/db.sqlite3 ".backup '$DATA_FOLDER/db-backup/db.sqlite3'"
+	sqlite3 $data_folder/db.sqlite3 ".backup '$data_folder/db-backup/db.sqlite3'"
 
-	cd $DATA_FOLDER/db-backup
-	tar -czf $DROPBOX/$BACKUP_FILE.tgz db.sqlite3
-	cd && rm -f $DATA_FOLDER/db-backup/*
+	cd $data_folder/db-backup || exit
+	tar -czf "${dropbox}"/"${backup_file}".tgz db.sqlite3
+	cd && rm -f $data_folder/db-backup/*
 	
 	~/.dropbox-dist/dropboxd &> /dev/null &
 
@@ -50,10 +50,10 @@ backup_db () {
 
 # Delete old backups.
 backup_del () {
-	count=`ls ${DROPBOX} | wc -l`
+	count=$(ls "${dropbox}" | wc -l)
 	while [[ ${count} -gt 7 ]]; do
-		ls -t ${DROPBOX} | tail -n 1 | xargs -i rm -f ${DROPBOX}/{}
-		count=$(( ${count} - 1 ))
+		ls -t "${dropbox}" | tail -n 1 | xargs -i rm -f "${dropbox}"/{}
+		count=$((count - 1))
 	done
 }
 

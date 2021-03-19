@@ -5,56 +5,48 @@
 ## Author: l3e0x7b, <lyq0x7b@foxmail.com>
 ##
 
-BROOK_BIN="/usr/bin/brook"
-BROOK_PORT="10004"
-BROOK_PWD="2Ghlmcl"
-BROOK_LOG="/var/log/brook.log"
-BROOK_VER_NEW=`curl -s https://api.github.com/repos/txthinking/brook/releases/latest | grep "tag_name" | sed 's/^.*: "//;s/",.*$//'`
+brook_bin="/usr/bin/brook"
+brook_port="10004"
+brook_pwd="2Ghlmcl"
+brook_log="/var/log/brook.log"
+brook_ver_new=$(curl -s https://api.github.com/repos/txthinking/brook/releases/latest | grep "tag_name" | sed 's/^.*: "//;s/",.*$//')
 
-func_inst () {
-	curl -L https://github.com/txthinking/brook/releases/download/${BROOK_VER_NEW}/brook_linux_amd64 -o ${BROOK_BIN}
-
-	if [[ $? -eq 0 ]]; then
-		chmod +x ${BROOK_BIN}
-		func_start
+install () {
+	if curl -L https://github.com/txthinking/brook/releases/download/"${brook_ver_new}"/brook_linux_amd64 -o ${brook_bin}; then
+		chmod +x ${brook_bin}
+		start
 	else
 		echo "Install/update brook failed."
 	fi
 }
 
-func_update () {
-	BROOK_VER="v`${BROOK_BIN} -v | awk '{print $3}'`"
+update () {
+	brook_ver="v$(${brook_bin} -v | awk '{print $3}')"
 
-	if [[ ${BROOK_VER} -ne ${BROOK_VER_NEW} ]]; then
-		pgrep brook &> /dev/null
+	if [[ ${brook_ver} -ne ${brook_ver_new} ]]; then
 
-		if [[ $? -eq 0 ]]; then
-			pkill -9 brook
-		fi
+		pgrep brook &> /dev/null && pkill -9 brook
 
-		func_inst
+		install
 	else
 		echo "Brook is up to date."
 	fi
 }
 
-func_usage () {
+usage () {
 	echo "Usage: brook.sh [command]"
 	echo -e "The default command is 'install'\n"
 	echo "Commands:"
 	echo -e "  install\n  update\n  start\n  stop\n  restart"
 }
 
-func_start () {
-	pgrep brook &> /dev/null
-
-	if [[ $? -eq 0 ]]; then
+start () {
+	if pgrep brook &> /dev/null; then
 		echo "Brook server is already running."
 	else
-		nohup ${BROOK_BIN} -d server -l :${BROOK_PORT} -p ${BROOK_PWD} &>> ${BROOK_LOG} &
-
-		pgrep brook &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		nohup ${brook_bin} -d server -l :${brook_port} -p ${brook_pwd} &>> ${brook_log} &
+		
+		if pgrep brook &> /dev/null; then
 			echo "Brook server is running."
 		else
 			echo "Start brook server failed."
@@ -62,14 +54,11 @@ func_start () {
 	fi
 }
 
-func_stop () {
-	pgrep brook &> /dev/null
-
-	if [[ $? -eq 0 ]]; then
+stop () {
+	if pgrep brook &> /dev/null; then
 		pkill -9 brook
 
-		pgrep brook &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		if pgrep brook &> /dev/null; then
 			echo "Stop brook server failed."
 		else
 			echo "Brook server is stopped."
@@ -79,52 +68,49 @@ func_stop () {
 	fi
 }
 
-func_restart () {
-	pgrep brook &> /dev/null
-
-	if [[ $? -eq 0 ]]; then
+restart () {
+	if pgrep brook &> /dev/null; then
 		pkill -9 brook
 
-		pgrep brook &> /dev/null
-		if [[ $? -eq 0 ]]; then
+		if pgrep brook &> /dev/null; then
 			echo "Stop brook server failed."
 		else
-			func_start
+			start
 		fi
 	else
-		func_start
+		start
 	fi
 }
 
 case $1 in
 	install|'')
-		if [[ ! -f ${BROOK_BIN} ]]; then
-			func_inst
+		if [[ ! -f ${brook_bin} ]]; then
+			install
 		else
 			echo "Brook is already installed."
 		fi
 		;;
 	update)
-		if [[ ! -f ${BROOK_BIN} ]]; then
+		if [[ ! -f ${brook_bin} ]]; then
 			echo "Brook is not installed, please run 'brook.sh install' to install it first."
 		else
-			func_update
+			update
 		fi
 		;;
 	start)
-		func_start
+		start
 		;;
 	stop)
-		func_stop
+		stop
 		;;
 	restart)
-		func_restart
+		restart
 		;;
 	help)
-		func_usage
+		usage
 		;;
 	*)
 		echo -e "invalid command -- '$1'\n"
-		func_usage
+		usage
 		;;
 esac
