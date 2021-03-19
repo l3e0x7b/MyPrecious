@@ -17,7 +17,7 @@ git add Files/channel_v3.json
 git commit -m "Update Files/channel_v3.json"
 git push origin main
 
-if ! grep channel_v3 /etc/crontab &> /dev/null; then
+if ! grep st3_pc_channel_auto_update /etc/crontab &> /dev/null; then
     echo "0 0 * * * root ${script_path}/st3_pc_channel_auto_update.sh &> /dev/null" >> /etc/crontab
 
     systemctl restart cron || systemctl restart crond
