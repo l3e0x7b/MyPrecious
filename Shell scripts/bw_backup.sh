@@ -11,6 +11,10 @@
 
 dropbox="$HOME/Dropbox/BitWBackups"
 
+if [[ ! -d ${dropbox} ]]; then
+	mkdir -p "${dropbox}"
+fi
+
 # Back up all data.
 backup_all () {
 	data_folder="/opt/bitwarden_rs"
