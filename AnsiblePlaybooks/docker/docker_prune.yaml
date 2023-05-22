@@ -1,0 +1,13 @@
+---
+- name: Pull Docker Images
+  hosts: all
+  tasks:
+    - name: Prune Docker Objects
+      docker_prune:
+        images: yes
+        images_filters:
+          dangling: yes
+        containers: yes
+        networks: yes
+        volumes: yes
+        builder_cache: yes
