@@ -1,0 +1,47 @@
+# Use specific version of docker images:
+# ansible-playbook -e TAG=1.0.0 docker-image_pull(all-same-version).yaml
+
+---
+- name: Pull Docker Images
+  hosts: all
+  vars:
+    REG_URL: "harbor.example.com"
+    REG_USER: "user"
+    REG_TOKEN: "password"
+    TAG: "latest"
+  tasks:
+    - name: Log Into Docker Registry
+      docker_login:
+        registry_url: "{{ REG_URL }}"
+        username: "{{ REG_USER }}"
+        password: "{{ REG_TOKEN }}"
+
+    - name: Pull Image A
+      docker_image:
+        name: "{{ REG_URL }}/library/A"
+        tag: "{{ TAG }}"
+        source: pull
+        force_source: yes
+        state: present
+
+    - name: Pull Image B
+      docker_image:
+        name: "{{ REG_URL }}/library/B"
+        tag: "{{ TAG }}"
+        source: pull
+        force_source: yes
+        state: present
+
+    - name: Pull Image C
+      docker_image:
+        name: "{{ REG_URL }}/library/C"
+        tag: "{{ TAG }}"
+        source: pull
+        force_source: yes
+        state: present
+
+    - name: Prune Docker Dangling Images
+      docker_prune:
+        images: yes
+        images_filters:
+          dangling: yes
