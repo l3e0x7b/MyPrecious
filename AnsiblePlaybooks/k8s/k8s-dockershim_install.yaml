@@ -1,0 +1,389 @@
+---
+- name: Preparation
+  hosts: all
+  tasks:
+    - name: Install Ntpdate
+      apt:
+        name: ntpdate
+        state: latest
+        update_cache: yes
+        force_apt_get: yes
+    - name: Timing Synchronization
+      command: ntpdate -u cn.pool.ntp.org
+
+    - name: Add Kernel Modules Temporarily
+      command: modprobe br_netfilter overlay
+
+    - name: Add Kernel Modules Permanently
+      lineinfile:
+        path: /etc/modules-load.d/k8s.conf
+        state: present
+        create: yes
+        marker: ''
+        block: |
+          br_netfilter
+          overlay
+
+    - name: Configure Kernel Parameters Permanently
+      blockinfile:
+        path: /etc/sysctl.d/k8s.conf
+        state: present
+        create: yes
+        marker: ''
+        block: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+
+    - name: Apply Kernel Parameters Configuration Temporarily
+      command: sysctl --system
+
+- name: Install Kubernetes Container Runtime (Dockershim)
+  hosts: all
+
+  vars:
+    K8S_VERSION: '1.23.17'
+    #PROXY_ENV:
+    #  http_proxy:
+    #  https_proxy:
+
+  tasks:
+    - name: Install Dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: latest
+        update_cache: yes
+        force_apt_get: yes
+
+    - name: Create Apt Signing Key Directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+
+    - name: Add The Google Cloud Public Signing Key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        keyring: /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+        state: present
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Add The Docker Public Signing Key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        keyring: /etc/apt/keyrings/docker.gpg
+        state: present
+
+    - name: Add The Kubernetes Apt Repository
+      apt_repository:
+        repo: 'deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://mirrors.ustc.edu.cn/kubernetes/apt/ kubernetes-xenial main'
+        filename: kubernetes.list
+        state: present
+        update_cache: yes
+
+    - name: Add The Docker Apt Repository
+      apt_repository:
+        repo: 'deb [signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.ustc.edu.cn/docker-ce/linux/debian {{ ansible_lsb.codename }} stable'
+        filename: docker.list
+        state: present
+        update_cache: yes
+
+    - name: Install Docker, Kubeadm, Kubelet And Kubectl
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - docker-ce-rootless-extras
+          - kubeadm
+          - kubelet
+          - kubectl
+        state: latest
+        force_apt_get: yes
+      when: K8S_VERSION == ''
+
+    - name: Install Docker And Specific Version Of Kubeadm, Kubelet And Kubectl
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - docker-ce-rootless-extras
+          - kubeadm='{{ K8S_VERSION }}-00'
+          - kubelet='{{ K8S_VERSION }}-00'
+          - kubectl='{{ K8S_VERSION }}-00'
+        state: present
+        force_apt_get: yes
+
+    - name: Pin The Version Of Kubeadm, Kubelet And Kubectl
+      command: apt-mark hold kubeadm kubelet kubectl
+
+    - name: Configure Docker Daemon
+      blockinfile:
+        path: /etc/docker/daemon.json
+        state: present
+        create: yes
+        marker: ''
+        block: |
+          {
+            "exec-opts": ["native.cgroupdriver=systemd"],
+            "log-opts": {"max-size": "10m"},
+            "storage-driver": "overlay2",
+            "storage-opts": ["overlay2.override_kernel_check=true"],
+            "registry-mirrors": [
+              "https://hub-mirror.c.163.com",
+              "https://docker.mirrors.ustc.edu.cn",
+              "https://tuyjisn6.mirror.aliyuncs.com"
+            ],
+            "insecure-registries": ["127.0.0.1"]
+          }
+      notify: Restart docker.service
+
+  handlers:
+    - name: Restart Docker Service
+      systemd:
+        name: docker.service
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
+      listen: Restart docker.service
+
+- name: Deploy Kubernetes Control-plane Node
+  hosts: k8s_cp1
+
+  vars:
+    K8S_VERSION: '1.23.17'
+    #PROXY_ENV:
+    #  http_proxy:
+    #  https_proxy:
+
+  tasks:
+    - name: Init Control-plane
+      command: kubeadm init --image-repository registry.cn-hangzhou.aliyuncs.com/google_containers --pod-network-cidr 10.244.0.0/16 --control-plane-endpoint {{ ansible_default_ipv4.address }}
+      when: K8S_VERSION == ''
+
+    - name: Init Control-plane With Specific Version
+      command: kubeadm init --image-repository registry.cn-hangzhou.aliyuncs.com/google_containers --pod-network-cidr 10.244.0.0/16 --control-plane-endpoint {{ ansible_default_ipv4.address }} --kubernetes-version {{ K8S_VERSION }}
+
+    - name: Make Kubectl Work For Root
+      lineinfile:
+        path: /root/.bashrc
+        state: present
+        regexp: 'admin\.conf'
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+
+    - name: Set Kubectl Completion
+      lineinfile:
+        path: /root/.bashrc
+        state: present
+        regexp: 'kubectl completion bash'
+        line: 'source <(kubectl completion bash)'
+
+    - name: Install Network Add-on (Flannel)
+      command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+      #environment: '{{ PROXY_ENV }}'
+
+- name: Prepare Related Settings For New Control-plane Node And Worker Nodes
+  hosts: k8s_cp1
+  tasks:
+    - name: Re-upload The Certificates And Generate A New Decryption Key
+      shell: kubeadm init phase upload-certs --upload-certs | tail -n 1
+      register: CERT_KEY
+
+    - name: Generate Join Command
+      command: kubeadm token create --print-join-command
+      register: JOIN_CMD
+
+- name: Join New Control-plane Node To The Cluster
+  hosts: k8s_cp2
+  tasks:
+    - name: Join New Control-plane Node To The Cluster
+      command: "{{ hostvars['cp1']['JOIN_CMD']['stdout'] }} --control-plane --certificate-key {{ hostvars['cp1']['CERT_KEY']['stdout'] }}"
+
+    - name: Make Kubectl Work For Root
+      lineinfile:
+        path: /root/.bashrc
+        state: present
+        regexp: 'admin\.conf'
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+
+    - name: Set Kubectl Completion
+      lineinfile:
+        path: /root/.bashrc
+        state: present
+        regexp: 'kubectl completion bash'
+        line: 'source <(kubectl completion bash)'
+
+- name: Join Worker Nodes to the Cluster
+  hosts: k8s_worker
+  tasks:
+    - name: Join Worker Nodes to the Cluster
+      command: "{{ hostvars['cp1']['JOIN_CMD']['stdout'] }}"
+
+- name: Check Status Of All Nodes
+  hosts: k8s_cp1
+  tasks:
+    - name: Check Status Of All Nodes
+      shell: kubectl get nodes -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+      register: STATUS
+      until: STATUS.stdout.find("Ready=False") == -1
+      retries: 6
+      delay: 20
+
+- name: Install Helm
+  hosts: k8s_cp
+
+  #vars:
+  #  PROXY_ENV:
+  #    http_proxy:
+  #    https_proxy:
+
+  tasks:
+    - name: Get Helm Version
+      shell: 'curl -s https://api.github.com/repos/helm/helm/releases/latest | grep tag_name | sed "s/^.*: \"//;s/\",.*$//"'
+      register: HELM_VERSION
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Get And Unarchive Helm Package
+      unarchive:
+        src: https://get.helm.sh/helm-{{ HELM_VERSION.stdout }}-linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: yes
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Move Helm To The Correct Path
+      copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: preserve
+
+    - name: Delete Helm Directory
+      file:
+        path: /tmp/linux-amd64
+        state: absent
+
+- name: Install Nginx Ingress Controller
+  hosts: k8s_cp1
+
+  vars:
+    INGRESS_NGINX_CTRL_VERSION: 'v1.6.4'
+    INGRESS_NGINX_KUBE_WEBHOOK_CERTGEN_VERSION: 'v20220916-gd32f8c343'
+    #PROXY_ENV:
+    #  http_proxy:
+    #  https_proxy:
+
+  tasks:
+    - name: Pull The Specific Version Of Ingress Nginx Controller Image
+      command: crictl pull registry.cn-hangzhou.aliyuncs.com/l7g/ingress-nginx-controller:{{ INGRESS_NGINX_CTRL_VERSION }}
+
+    - name: Pull The Specific Version Of Ingress Nginx Kube Webhook Certgen Image
+      command: crictl pull registry.cn-hangzhou.aliyuncs.com/l7g/ingress-nginx-kube-webhook-certgen:{{ INGRESS_NGINX_KUBE_WEBHOOK_CERTGEN_VERSION }}
+
+    - name: Get YAML Manifest
+      get_url:
+        url: https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-{{ INGRESS_NGINX_CTRL_VERSION }}/deploy/static/provider/cloud/deploy.yaml
+        dest: /tmp/ingress-nginx.yaml
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Modify The Manifest To Use Local Image (1/2)
+      replace:
+        path: /tmp/ingress-nginx.yaml
+        regexp: 'image: registry\.k8s\.io/ingress-nginx/controller.*$'
+        replace: 'image: registry.cn-hangzhou.aliyuncs.com/l7g/ingress-nginx-controller:{{ INGRESS_NGINX_CTRL_VERSION }}'
+
+    - name: Modify The Manifest To Use Local Image (2/2)
+      replace:
+        path: /tmp/ingress-nginx.yaml
+        regexp: 'image: registry\.k8s\.io/ingress-nginx/kube-webhook-certgen.*$'
+        replace: 'image: registry.cn-hangzhou.aliyuncs.com/l7g/ingress-nginx-kube-webhook-certgen:{{ INGRESS_NGINX_KUBE_WEBHOOK_CERTGEN_VERSION }}'
+
+    - name: Modify The Manifest To Automatically Set Default Ingress Class
+      lineinfile:
+        path: /tmp/ingress-nginx.yaml
+        state: present
+        insertafter: 'name: nginx'
+        line: "  annotations:\n    ingressclass.kubernetes.io/is-default-class: \"true\""
+
+    - name: Install Nginx Ingress Controller
+      command: kubectl apply -f /tmp/ingress-nginx.yaml
+
+    - name: Check If Installation Is Successful
+      command: kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+      register: INGRESS_RESULT
+      until: INGRESS_RESULT.stdout.find("condition met") != -1
+
+    - name: Delete Manifest File
+      file:
+        path: /tmp/ingress-nginx.yaml
+        state: absent
+
+- name: Install Metallb
+  hosts: k8s_cp1
+
+  #vars:
+  #  PROXY_ENV:
+  #    http_proxy:
+  #    https_proxy:
+
+  tasks:
+    - name: Get Metallb Version
+      shell: 'curl -s https://api.github.com/repos/metallb/metallb/releases/latest | grep tag_name | sed "s/^.*: \"//;s/\",.*$//"'
+      register: METALLB_VERSION
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Install Metallb
+      command: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/{{ METALLB_VERSION.stdout }}/config/manifests/metallb-native.yaml
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Check If Installation Is Successful
+      command: kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=controller --timeout=120s
+      register: METALLB_RESULT
+      until: METALLB_RESULT.stdout.find("condition met") != -1
+
+- name: Install Cert-manager
+  hosts: k8s_cp1
+
+  #vars:
+  #  PROXY_ENV:
+  #    http_proxy:
+  #    https_proxy:
+
+  tasks:
+    - name: Get Cert-manager Version
+      shell: 'curl -s https://api.github.com/repos/cert-manager/cert-manager/releases/latest | grep tag_name | sed "s/^.*: \"//;s/\",.*$//"'
+      register: CM_VERSION
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Install Cert-manager
+      command: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/{{ CM_VERSION.stdout }}/cert-manager.yaml
+      #environment: '{{ PROXY_ENV }}'
+
+    - name: Check If Installation Is Successful
+      command: kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+      register: CM_RESULT
+      until: CM_RESULT.stdout.find("condition met") != -1
+
+- name: Install Rancher
+  hosts: k8s_cp1
+
+  vars:
+    RANCHER_HOSTNAME: 'rancher.example.com'
+    RANCHER_INITPWD: 'admin'
+
+  tasks:
+    - name: Add the Helm Chart Repository
+      command: helm repo add rancher-stable https://releases.rancher.com/server-charts/stable
+
+    - name: Install Rancher
+      #command: helm upgrade --install rancher rancher-stable/rancher --repo https://releases.rancher.com/server-charts/stable --namespace cattle-system --create-namespace --set hostname={{ RANCHER_HOSTNAME }} --set bootstrapPassword={{ RANCHER_INITPWD }}
+      command: helm install rancher rancher-stable/rancher --namespace cattle-system --create-namespace --set hostname={{ RANCHER_HOSTNAME }} --set bootstrapPassword={{ RANCHER_INITPWD }}
+
+    - name: Check If Installation Is Successful
+      command: kubectl -n cattle-system rollout status deploy/rancher
+      register: RANCHER_RESULT
+      until: RANCHER_RESULT.stdout.find("successfully rolled out") != -1
+      retries: 6
+      delay: 20
